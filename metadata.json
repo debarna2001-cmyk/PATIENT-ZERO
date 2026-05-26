@@ -1,0 +1,8 @@
+{
+  "name": "Patient Zero",
+  "description": "An immersive, clinical emergency simulator and NEET PG preparation companion app.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

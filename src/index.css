@@ -1,0 +1,154 @@
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: 'Space Grotesk', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .bg-cyber-grid {
+    background-size: 40px 40px;
+    background-image: linear-gradient(to right, rgba(34, 211, 238, 0.1) 1px, transparent 1px),
+                      linear-gradient(to bottom, rgba(34, 211, 238, 0.1) 1px, transparent 1px);
+  }
+}
+
+body {
+  @apply antialiased transition-colors duration-300;
+}
+
+/* Standalone mobile layout compatibility guards */
+html, body {
+  overscroll-behavior-y: contain;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Simulated CRT Screen and Clinical Indicator Styles */
+.clinical-glow-green {
+  text-shadow: 0 0 10px rgba(34, 197, 94, 0.55), 0 0 2px rgba(34, 197, 94, 0.3);
+}
+
+.clinical-glow-red {
+  text-shadow: 0 0 10px rgba(239, 68, 68, 0.65), 0 0 4px rgba(239, 68, 68, 0.4);
+}
+
+.clinical-glow-amber {
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.65), 0 0 4px rgba(245, 158, 11, 0.4);
+}
+
+.clinical-glow-cyan {
+  text-shadow: 0 0 12px rgba(6, 182, 212, 0.8), 0 0 4px rgba(6, 182, 212, 0.5);
+}
+
+.clinical-glow-indigo {
+  text-shadow: 0 0 10px rgba(99, 102, 241, 0.65), 0 0 4px rgba(99, 102, 241, 0.4);
+}
+
+
+/* Tactile weights and cinematic glow classes for interactive nodes */
+.tactile-node {
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+}
+
+.tactile-node:hover {
+  transform: translateY(-1px);
+}
+
+.tactile-node:active {
+  transform: translateY(1.5px) scale(0.985);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.6);
+}
+
+/* Dynamic glowing highlights */
+.glow-btn-cyan {
+  border-color: rgba(6, 182, 212, 0.25);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glow-btn-cyan:hover {
+  border-color: rgba(6, 182, 212, 0.9);
+  box-shadow: 0 0 15px rgba(6, 182, 212, 0.35);
+}
+.glow-btn-cyan:active {
+  transform: translateY(1.5px) scale(0.98);
+}
+
+.glow-btn-indigo {
+  border-color: rgba(99, 102, 241, 0.25);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glow-btn-indigo:hover {
+  border-color: rgba(99, 102, 241, 0.9);
+  box-shadow: 0 0 15px rgba(99, 102, 241, 0.35);
+}
+.glow-btn-indigo:active {
+  transform: translateY(1.5px) scale(0.98);
+}
+
+.glow-btn-rose {
+  border-color: rgba(244, 63, 94, 0.25);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glow-btn-rose:hover {
+  border-color: rgba(244, 63, 94, 0.9);
+  box-shadow: 0 0 15px rgba(244, 63, 94, 0.35);
+}
+.glow-btn-rose:active {
+  transform: translateY(1.5px) scale(0.98);
+}
+
+.glow-btn-emerald {
+  border-color: rgba(16, 185, 129, 0.25);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glow-btn-emerald:hover {
+  border-color: rgba(16, 185, 129, 0.9);
+  box-shadow: 0 0 15px rgba(16, 185, 129, 0.35);
+}
+.glow-btn-emerald:active {
+  transform: translateY(1.5px) scale(0.98);
+}
+
+.glow-btn-amber {
+  border-color: rgba(245, 158, 11, 0.25);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.glow-btn-amber:hover {
+  border-color: rgba(245, 158, 11, 0.9);
+  box-shadow: 0 0 15px rgba(245, 158, 11, 0.35);
+}
+.glow-btn-amber:active {
+  transform: translateY(1.5px) scale(0.98);
+}
+
+/* Custom CSS Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(148, 163, 184, 0.4);
+}
+
