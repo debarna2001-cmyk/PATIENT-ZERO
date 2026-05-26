@@ -6,22 +6,25 @@ interface Props {
   missions: Mission[];
   patientHealth: number;
   onUpdateProgress: (id: string, amount?: number) => void;
-  onAddMission: (title: string, category: 'MCQ' | 'Revision' | 'Lectures' | 'Tests' | 'Custom', target: number, unit: string) => void;
+  onAddMission: (title: string, category: 'MCQ' | 'Revision' | 'Lectures' | 'Tests' | 'Custom', target: number, unit: string, period?: 'daily' | 'weekly') => void;
   onSimulateSlip: (reason: string) => void;
+  studyMode?: 'Normal' | 'Duty' | 'Rest';
 }
 
-export default function MissionsPanel({ missions, patientHealth, onUpdateProgress, onAddMission, onSimulateSlip }: Props) {
+export default function MissionsPanel({ missions, patientHealth, onUpdateProgress, onAddMission, onSimulateSlip, studyMode = 'Normal' }: Props) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newTarget, setNewTarget] = useState(1);
   const [newUnit, setNewUnit] = useState("Chapters");
+  const [newPeriod, setNewPeriod] = useState<'daily' | 'weekly'>("daily");
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
-    onAddMission(newTitle, 'Custom', newTarget, newUnit);
+    onAddMission(newTitle, 'Custom', newTarget, newUnit, newPeriod);
     setNewTitle("");
     setNewTarget(1);
+    setNewPeriod("daily");
     setShowAddForm(false);
   };
 
@@ -31,15 +34,15 @@ export default function MissionsPanel({ missions, patientHealth, onUpdateProgres
       {/* Immersive Warning Banner */}
       <div className={`p-5 rounded-3xl border flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-sm transition-colors ${
         patientHealth < 35 
-          ? "bg-red-50 border-red-200" 
-          : "bg-emerald-50 border-emerald-200"
+          ? "bg-red-50 dark:bg-red-950/40 border-red-200 dark:border-red-900" 
+          : "bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-900"
       }`}>
         <div className="flex items-start md:items-center gap-4">
-          <div className={`p-3 rounded-2xl ${patientHealth < 35 ? "bg-red-100 text-red-600 animate-pulse" : "bg-emerald-100 text-emerald-600"}`}>
+          <div className={`p-3 rounded-2xl ${patientHealth < 35 ? "bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 animate-pulse" : "bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400"}`}>
             <ShieldAlert className="w-6 h-6 shrink-0" />
           </div>
           <div>
-            <span className={`text-xs font-bold uppercase tracking-wider ${patientHealth < 35 ? "text-red-500" : "text-emerald-600"}`}>Tactical Shift Status</span>
+            <span className={`text-xs font-bold uppercase tracking-wider ${patientHealth < 35 ? "text-red-500 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>Tactical Shift Status</span>
             <p className="text-slate-700 dark:text-slate-300 font-medium text-sm mt-1">
               {patientHealth < 35 
                 ? "WARNING: Preparation state collapsing. Complete directives immediately or initialize triage!" 
@@ -68,18 +71,24 @@ export default function MissionsPanel({ missions, patientHealth, onUpdateProgres
         {/* LEFT: Core Tactical Directives */}
         <div className="lg:col-span-8 flex flex-col gap-6">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 md:p-8 shadow-sm">
-            <div className="flex justify-between items-center border-b border-slate-100 pb-5 mb-6">
+            <div className="flex justify-between items-start md:items-center flex-col md:flex-row gap-4 border-b border-slate-100 pb-5 mb-6">
               <div>
-                <h3 className="font-bold text-slate-900 dark:text-slate-100 text-xl tracking-tight">Daily Study Directives</h3>
+                <h3 className="font-bold text-slate-900 dark:text-slate-100 text-xl tracking-tight flex items-center gap-2">
+                  Daily Study Directives
+                  {studyMode === 'Duty' && <span className="px-2 py-0.5 rounded text-[10px] bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 font-bold uppercase tracking-widest whitespace-nowrap">Duty Active - Targets Halved</span>}
+                  {studyMode === 'Rest' && <span className="px-2 py-0.5 rounded text-[10px] bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400 font-bold uppercase tracking-widest whitespace-nowrap">Rest Active</span>}
+                </h3>
                 <p className="text-sm text-slate-500 font-medium mt-1">Complete objectives to restore Patient Vitals</p>
               </div>
               
-              <button
-                onClick={() => setShowAddForm(!showAddForm)}
-                className="px-4 py-2 text-sm font-bold bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:bg-slate-800/50 rounded-xl transition"
-              >
-                {showAddForm ? "Close Form" : "+ Add Directive"}
-              </button>
+              {studyMode !== 'Rest' && (
+                <button
+                  onClick={() => setShowAddForm(!showAddForm)}
+                  className="px-4 py-2 text-sm font-bold bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:bg-slate-800/50 rounded-xl transition shrink-0"
+                >
+                  {showAddForm ? "Close Form" : "+ Add Directive"}
+                </button>
+              )}
             </div>
 
             {showAddForm && (
@@ -117,6 +126,17 @@ export default function MissionsPanel({ missions, patientHealth, onUpdateProgres
                       className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-800 dark:text-slate-200 text-sm font-medium outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100 transition"
                     />
                   </div>
+                  <div className="flex flex-col gap-2 sm:col-span-2">
+                    <label className="text-sm font-bold text-slate-600 dark:text-slate-400">Reset Cycle / Period</label>
+                    <select
+                      value={newPeriod}
+                      onChange={(e) => setNewPeriod(e.target.value as 'daily' | 'weekly')}
+                      className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-4 py-3 text-slate-800 dark:text-slate-200 text-sm font-medium outline-none focus:border-cyan-400 focus:ring-2 focus:ring-cyan-100 transition"
+                    >
+                      <option value="daily">Daily Reset (Resets at midnight every day)</option>
+                      <option value="weekly">Weekly Reset (Maintained / resets weekly)</option>
+                    </select>
+                  </div>
                 </div>
                 <button type="submit" className="py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm tracking-wide shadow-lg shadow-slate-900/10 transition mt-2">
                   Confirm Directive Parameter
@@ -125,14 +145,21 @@ export default function MissionsPanel({ missions, patientHealth, onUpdateProgres
             )}
 
             <div className="flex flex-col gap-4">
-              {missions.length === 0 ? (
+              {studyMode === 'Rest' ? (
+                <div className="text-center text-rose-500 py-16 bg-rose-50 dark:bg-rose-950/20 rounded-3xl border border-dashed border-rose-200 dark:border-rose-900/50">
+                  <Heart className="w-12 h-12 mx-auto mb-4 animate-pulse relative z-10" />
+                  <span className="font-black text-xl uppercase tracking-widest block mb-2 relative z-10">Rest Day Active</span>
+                  <span className="font-medium text-rose-600 dark:text-rose-400 relative z-10 block max-w-sm mx-auto px-4">All directives suspended. Prioritize recovery and burnout reduction.</span>
+                </div>
+              ) : missions.length === 0 ? (
                 <div className="text-center text-slate-500 py-12 bg-slate-50 dark:bg-slate-950/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
                   <span className="font-medium">No directives active.</span>
                 </div>
               ) : (
                 missions.map(m => {
-                  const isCompleted = m.status === "Completed";
-                  const pct = Math.floor((m.current / m.target) * 100);
+                  const activeTarget = studyMode === 'Duty' ? Math.max(1, Math.ceil(m.target / 2)) : m.target;
+                  const isCompleted = m.status === "Completed" || m.current >= activeTarget;
+                  const pct = Math.min(100, Math.floor((m.current / activeTarget) * 100));
 
                   return (
                     <div
@@ -150,7 +177,17 @@ export default function MissionsPanel({ missions, patientHealth, onUpdateProgres
                           ) : (
                             <div className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
                           )}
-                          <h4 className={`font-bold text-base ${isCompleted ? 'text-emerald-800 line-through opacity-70' : 'text-slate-900 dark:text-slate-100'}`}>{m.title}</h4>
+                          <h4 className={`font-bold text-base flex flex-col sm:flex-row items-baseline gap-2 ${isCompleted ? 'text-emerald-800 line-through opacity-70' : 'text-slate-900 dark:text-slate-100'}`}>
+                            {m.title}
+                            {studyMode === 'Duty' && !isCompleted && (
+                              <span className="text-[10px] uppercase font-bold tracking-widest text-orange-600 dark:text-orange-400 bg-orange-100 dark:bg-orange-500/20 px-2 py-0.5 rounded leading-none">Duty 50%</span>
+                            )}
+                            {m.period === 'weekly' ? (
+                              <span className="text-[10px] uppercase font-semibold tracking-widest text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/40 px-2.5 py-0.5 rounded-full border border-indigo-200/50 dark:border-indigo-800/30">Weekly Limit</span>
+                            ) : (
+                              <span className="text-[10px] uppercase font-semibold tracking-widest text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-0.5 rounded-full border border-emerald-200/50 dark:border-emerald-800/30">Daily Cycle</span>
+                            )}
+                          </h4>
                         </div>
                         
                         <div className="flex items-center gap-4 mt-3">
@@ -161,13 +198,14 @@ export default function MissionsPanel({ missions, patientHealth, onUpdateProgres
                             />
                           </div>
                           <span className={`text-sm font-bold min-w-[60px] text-right ${isCompleted ? 'text-emerald-600' : 'text-slate-600 dark:text-slate-400'}`}>
-                            {m.current} / {m.target}
+                            {m.current} / {activeTarget}
                           </span>
                         </div>
                         
                         <div className="flex gap-4 mt-3 text-xs font-bold uppercase tracking-wider">
-                          <span className={`${isCompleted ? 'text-emerald-600/70' : 'text-blue-500/80'}`}>+{m.xpReward} XP</span>
-                          <span className={`${isCompleted ? 'text-emerald-600/70' : 'text-rose-500/80'}`}>+{m.stabilizeValue}% Health</span>
+                          <span className={`${isCompleted ? 'text-emerald-600/70 dark:text-emerald-400' : 'text-blue-500/80 dark:text-blue-400'}`}>+{m.xpReward} XP</span>
+                          <span className={`${isCompleted ? 'text-emerald-600/70 dark:text-emerald-400' : 'text-purple-500/80 dark:text-purple-400'}`}>+{m.creditReward} CRDT</span>
+                          <span className={`${isCompleted ? 'text-emerald-600/70 dark:text-emerald-400' : 'text-rose-500/80 dark:text-rose-400'}`}>+{m.stabilizeValue}% Health</span>
                         </div>
                       </div>
 
@@ -180,7 +218,7 @@ export default function MissionsPanel({ missions, patientHealth, onUpdateProgres
                             +1 {m.unit}
                           </button>
                           <button
-                            onClick={() => onUpdateProgress(m.id, m.target - m.current)}
+                            onClick={() => onUpdateProgress(m.id, activeTarget - m.current)}
                             className="px-4 py-2.5 text-sm font-bold bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 rounded-xl transition flex-1 sm:flex-none text-center"
                           >
                             Auto-Complete

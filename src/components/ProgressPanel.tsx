@@ -1,6 +1,7 @@
 import { UserStats } from "../types";
-import { Award, Target, Crosshair, HelpCircle, AlertOctagon, HeartPulse, Zap } from "lucide-react";
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
+import { Crosshair, HelpCircle, Award, Target, AlertOctagon, HeartPulse, Zap, Bot, Loader2, Sparkles } from "lucide-react";
+import { useState } from "react";
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 
 interface Props {
   stats: UserStats;
@@ -15,17 +16,29 @@ const RANKS = [
   { rank: "Attending", minXp: 6000, title: "Level 5: Master Diagnostician" }
 ];
 
-const mockTimelineData = [
-  { day: 'Mon', stability: 65, burnout: 80 },
-  { day: 'Tue', stability: 50, burnout: 85 },
-  { day: 'Wed', stability: 70, burnout: 60 },
-  { day: 'Thu', stability: 85, burnout: 40 },
-  { day: 'Fri', stability: 78, burnout: 55 },
-  { day: 'Sat', stability: 92, burnout: 30 },
-  { day: 'Sun', stability: 88, burnout: 22 },
-];
 
 export default function ProgressPanel({ stats }: Props) {
+  const [reviewLoading, setReviewLoading] = useState(false);
+  const [reviewData, setReviewData] = useState<{ title: string; content: string; actionableAdvice: string[] } | null>(null);
+
+  const reqReview = async (type: 'Daily' | 'Weekly' | 'Monthly') => {
+    setReviewLoading(true);
+    setReviewData(null);
+    try {
+      const res = await fetch('/api/metrics/review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stats, type })
+      });
+      const data = await res.json();
+      setReviewData(data);
+    } catch {
+      setReviewData({ title: "System Error", content: "AI Chief Resident unavailable.", actionableAdvice: [] });
+    } finally {
+      setReviewLoading(false);
+    }
+  };
+
   let currentRankIndex = RANKS.findIndex(r => stats.xp < r.minXp) - 1;
   if (currentRankIndex < 0) currentRankIndex = RANKS.length - 1; 
   if (stats.xp < 500) currentRankIndex = 0;
@@ -41,7 +54,7 @@ export default function ProgressPanel({ stats }: Props) {
   }
 
   // Radar data
-  const subjectPerformanceArray = Object.entries(stats.subjectPerformance).map(([subject, data]) => {
+  const subjectPerformanceArray = Object.entries(stats.subjectPerformance || {}).map(([subject, data]) => {
     return {
       subject: subject.split(" ")[0], // abbreviate
       accuracy: data.total > 0 ? Math.floor((data.correct / data.total) * 100) : 0,
@@ -57,6 +70,21 @@ export default function ProgressPanel({ stats }: Props) {
   ];
 
   const radarData = subjectPerformanceArray.length > 2 ? subjectPerformanceArray : fallbackRadar;
+
+  const timelineData = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dateStr = d.toISOString().split("T")[0];
+    const dayName = d.toLocaleDateString("en-US", { weekday: "short" });
+    timelineData.push({
+      day: dayName,
+      cases: (stats.activityLogs && stats.activityLogs[dateStr]) || 0,
+      sleep: (stats.sleepLogs && stats.sleepLogs[dateStr]) || 0,
+      mcqs: (stats.mcqLogs && stats.mcqLogs[dateStr]) || 0,
+      videos: (stats.videoLogs && stats.videoLogs[dateStr]) || 0
+    });
+  }
 
   return (
     <div className="flex flex-col gap-8">
@@ -136,50 +164,122 @@ export default function ProgressPanel({ stats }: Props) {
         <div className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm">
           <h3 className="font-bold text-slate-900 dark:text-slate-100 text-lg mb-6 flex items-center gap-2 tracking-tight">
             <Crosshair className="w-5 h-5 text-blue-500" />
-            Diagnostic Accuracy Map
+            Subject Wise Analytics
           </h3>
           <div className="h-64 w-full flex items-center justify-center">
             {subjectPerformanceArray.length === 0 ? (
-              <div className="text-center text-slate-500 bg-slate-50 dark:bg-slate-950/50 border border-slate-100 p-6 rounded-2xl">
-                <HelpCircle className="w-8 h-8 text-slate-300 mx-auto mb-2" />
-                <p className="font-medium text-sm">Insufficient clinical data.<br/>Admit more cases to build accuracy radar.</p>
+              <div className="text-center text-slate-500 bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800 p-6 rounded-2xl">
+                <HelpCircle className="w-8 h-8 text-slate-300 dark:text-slate-700 mx-auto mb-2" />
+                <p className="font-medium text-sm">Insufficient clinical data.<br/>Manually log sessions to build accuracy radar.</p>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
-                  <PolarGrid stroke="#e2e8f0" />
-                  <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 12, fontWeight: 600 }} />
-                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: '#94a3b8' }} />
-                  <Radar name="Accuracy %" dataKey="accuracy" stroke="#3b82f6" fill="#3b82f6" fillOpacity={0.4} />
-                  <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '12px' }} />
+                  <PolarGrid stroke="#64748b" opacity={0.3} />
+                  <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 11, fontWeight: 700 }} />
+                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: '#94a3b8' }} opacity={0.5} />
+                  <Radar name="Accuracy %" dataKey="accuracy" stroke="#00f0ff" fill="#3b82f6" fillOpacity={0.4} />
+                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', color: '#fff', fontSize: '12px', fontWeight: 600 }} />
                 </RadarChart>
               </ResponsiveContainer>
             )}
           </div>
         </div>
 
-        {/* Temporal Data Vitals graph (Mocked) */}
+        {/* Temporal Data Vitals graph (Real) */}
         <div className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm">
           <div className="flex justify-between items-center mb-6">
             <h3 className="font-bold text-slate-900 dark:text-slate-100 text-lg flex items-center gap-2 tracking-tight">
-              <HeartPulse className="w-5 h-5 text-rose-500" />
-              Patient Stabilization Trend
+              <HeartPulse className="w-5 h-5 text-indigo-500" />
+              Activity & Sleep Telemetry
             </h3>
           </div>
           <div className="h-64 w-full">
              <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={mockTimelineData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+              <BarChart data={timelineData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
                 <XAxis dataKey="day" stroke="#94a3b8" tick={{fontSize: 12, fontWeight: 600}} />
                 <YAxis stroke="#94a3b8" tick={{fontSize: 12}} />
                 <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: 'none', borderRadius: '12px', color: '#fff' }} />
-                <Line type="monotone" dataKey="stability" stroke="#10b981" strokeWidth={3} dot={{ fill: '#10b981', strokeWidth: 2 }} name="Health Index" />
-                <Line type="monotone" dataKey="burnout" stroke="#f43f5e" strokeWidth={3} dot={{ fill: '#f43f5e', strokeWidth: 2 }} name="Fatigue Index" />
-              </LineChart>
+                <Bar dataKey="cases" fill="#3b82f6" radius={[4, 4, 0, 0]} name="Cases Solved" />
+                <Bar dataKey="mcqs" fill="#f59e0b" radius={[4, 4, 0, 0]} name="MCQs (Marrow)" />
+                <Bar dataKey="videos" fill="#8b5cf6" radius={[4, 4, 0, 0]} name="Videos (Marrow)" />
+                <Bar dataKey="sleep" fill="#10b981" radius={[4, 4, 0, 0]} name="Sleep (Hours)" />
+              </BarChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-center text-xs font-bold text-slate-400 mt-4 tracking-wide uppercase">Weekly Telemetry Overview (Simulated Projection)</p>
+          <p className="text-center text-xs font-bold text-slate-400 mt-4 tracking-wide uppercase">Weekly Historical Data</p>
         </div>
       </div>
+
+      {/* AI Chief Resident Oversight */}
+      <div className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm relative overflow-hidden">
+        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 dark:bg-indigo-500/5 blur-3xl rounded-full"></div>
+        <div className="flex justify-between items-center mb-6 relative z-10">
+          <h3 className="font-bold text-slate-900 dark:text-slate-100 text-lg flex items-center gap-2 tracking-tight">
+            <Bot className="w-6 h-6 text-indigo-500" />
+            AI Chief Resident Oversight
+          </h3>
+        </div>
+        
+        {!reviewData && !reviewLoading && (
+          <div className="text-slate-500 font-medium text-sm mb-6 relative z-10 leading-relaxed border-l-2 border-indigo-200 dark:border-indigo-900 pl-4">
+            Awaiting your command. Generate an AI performance review to analyze your recent health metrics, case outcomes, burnout levels, and sleep telemetry.
+          </div>
+        )}
+
+        <div className="flex gap-3 mb-6 relative z-10 overflow-x-auto pb-2">
+          <button 
+            disabled={reviewLoading}
+            onClick={() => reqReview('Daily')}
+            className="px-5 py-2.5 bg-slate-100/50 dark:bg-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 hover:text-indigo-600 dark:hover:text-indigo-400 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold tracking-wide transition-all uppercase whitespace-nowrap disabled:opacity-50 flex items-center gap-2"
+          >
+            End of Day Review
+          </button>
+          <button 
+            disabled={reviewLoading}
+            onClick={() => reqReview('Weekly')}
+            className="px-5 py-2.5 bg-slate-100/50 dark:bg-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 hover:text-indigo-600 dark:hover:text-indigo-400 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold tracking-wide transition-all uppercase whitespace-nowrap disabled:opacity-50 flex items-center gap-2"
+          >
+            Weekly Evaluation
+          </button>
+          <button 
+             disabled={reviewLoading}
+             onClick={() => reqReview('Monthly')}
+             className="px-5 py-2.5 bg-slate-100/50 dark:bg-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 hover:text-indigo-600 dark:hover:text-indigo-400 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold tracking-wide transition-all uppercase whitespace-nowrap disabled:opacity-50 flex items-center gap-2"
+          >
+            Monthly Appraisal
+          </button>
+        </div>
+
+        {reviewLoading && (
+           <div className="flex flex-col items-center justify-center py-10">
+             <Loader2 className="w-8 h-8 text-indigo-500 animate-spin mb-4" />
+             <p className="text-sm font-bold text-slate-400 uppercase tracking-widest animate-pulse">Analyzing Telemetry Data...</p>
+           </div>
+        )}
+
+        {reviewData && !reviewLoading && (
+          <div className="bg-indigo-50 dark:bg-indigo-950/30 border border-indigo-100 dark:border-indigo-900/50 rounded-2xl p-6 relative z-10">
+             <h4 className="font-black text-indigo-900 dark:text-indigo-200 text-lg mb-3 tracking-tight flex items-center gap-2">
+               <Sparkles className="w-5 h-5 text-indigo-500" />
+               {reviewData.title}
+             </h4>
+             <p className="text-slate-700 dark:text-slate-300 text-sm leading-relaxed mb-6 font-medium">
+               {reviewData.content}
+             </p>
+             <h5 className="text-xs font-black uppercase text-indigo-400 tracking-widest mb-3">Priority Action Items</h5>
+             <ul className="space-y-3">
+               {reviewData.actionableAdvice.map((advice, i) => (
+                 <li key={i} className="flex gap-3 text-sm text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900/50 px-4 py-3 rounded-xl border border-indigo-50 dark:border-indigo-900/20 shadow-sm font-medium">
+                   <Target className="w-4 h-4 text-emerald-500 mt-0.5 shrink-0" />
+                   {advice}
+                 </li>
+               ))}
+             </ul>
+          </div>
+        )}
+      </div>
+
     </div>
   );
 }

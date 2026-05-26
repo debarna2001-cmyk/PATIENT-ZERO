@@ -29,13 +29,15 @@ export interface ClinicalCase {
 export interface Mission {
   id: string;
   title: string;
-  category: 'MCQ' | 'Revision' | 'Lectures' | 'Tests' | 'Custom';
+  category: 'MCQ' | 'Revision' | 'Lectures' | 'Tests' | 'Custom' | 'Triage';
   target: number; // in hours, count, etc.
   current: number;
   unit: string; // e.g., "Questions", "Hours", "Topics"
   xpReward: number;
+  creditReward: number;
   stabilizeValue: number; // how much patient health is healed
   status: 'Pending' | 'Completed';
+  period?: 'daily' | 'weekly';
 }
 
 export interface Achievement {
@@ -51,7 +53,9 @@ export interface UserStats {
   studentName: string;
   targetSpecialty: string;
   targetExamYear: number;
+  targetExamDate?: string; // YYYY-MM-DD
   daysToExam: number;
+  lastMissionResetDate?: string;
   
   // Game states representing "The Patient" (user's NEET PG study level)
   patientHealth: number; // 0 to 100
@@ -67,6 +71,14 @@ export interface UserStats {
   credits: number; // Currencies earned to redeem real-life rewards
   subjectPerformance: Record<string, { total: number; correct: number }>;
   activityLogs: Record<string, number>; // yyyy-mm-dd -> activity count for heatmap
+  sleepLogs: Record<string, number>; // yyyy-mm-dd -> hours slept
+  mcqLogs?: Record<string, number>; // yyyy-mm-dd -> MCQs solved count
+  videoLogs?: Record<string, number>; // yyyy-mm-dd -> videos watched count
+  
+  studyMode?: 'Normal' | 'Duty' | 'Rest';
+  currentWeekStart?: string;
+  dutyDaysUsed?: number;
+  restDaysUsed?: number;
 }
 
 export interface EmergencyLog {

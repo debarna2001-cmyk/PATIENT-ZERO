@@ -1,0 +1,43 @@
+{
+  "entities": {
+    "UserStats": {
+      "title": "UserStats",
+      "description": "User overall stats",
+      "type": "object",
+      "properties": {
+        "studentName": { "type": "string" },
+        "targetSpecialty": { "type": "string" },
+        "targetExamYear": { "type": "number" },
+        "daysToExam": { "type": "number" },
+        "patientHealth": { "type": "number" },
+        "burnoutIndex": { "type": "number" },
+        "isStabilizing": { "type": "boolean" },
+        "shiftStreak": { "type": "number" },
+        "patientsSaved": { "type": "number" },
+        "patientsFlatlined": { "type": "number" },
+        "unlockedPearlsCount": { "type": "number" },
+        "xp": { "type": "number" },
+        "credits": { "type": "number" }
+      },
+      "required": ["studentName", "targetSpecialty", "targetExamYear", "daysToExam", "patientHealth", "burnoutIndex", "isStabilizing", "shiftStreak", "patientsSaved", "patientsFlatlined", "unlockedPearlsCount", "xp", "credits"]
+    },
+    "UserMissions": {
+       "title": "UserMissions",
+       "description": "User missions data",
+       "type": "object",
+       "properties": {
+           "missionsTarget": { "type": "string" }
+       }
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": { "$ref": "#/entities/UserStats" },
+      "description": "User's main statistics document"
+    },
+    "users/{userId}/missions/{missionId}": {
+       "schema": { "$ref": "#/entities/UserMissions" },
+       "description": "Missions list"
+    }
+  }
+}

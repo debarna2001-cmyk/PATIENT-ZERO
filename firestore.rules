@@ -1,0 +1,86 @@
+
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isSignedIn() { return request.auth != null; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+
+    function isValidUserStats(data) {
+      return data.keys().hasAll(['studentName', 'targetSpecialty', 'targetExamYear', 'daysToExam', 'patientHealth', 'burnoutIndex', 'isStabilizing', 'shiftStreak', 'patientsSaved', 'patientsFlatlined', 'unlockedPearlsCount', 'xp', 'credits']) &&
+             data.studentName is string && data.studentName.size() <= 200 &&
+             data.targetSpecialty is string && data.targetSpecialty.size() <= 200 &&
+             data.targetExamYear is number &&
+             data.daysToExam is number &&
+             data.patientHealth is number &&
+             data.burnoutIndex is number &&
+             data.isStabilizing is bool &&
+             data.shiftStreak is number &&
+             data.patientsSaved is number &&
+             data.patientsFlatlined is number &&
+             data.unlockedPearlsCount is number &&
+             data.xp is number &&
+             data.credits is number;
+    }
+
+    function isValidMission(data) {
+       return data.keys().hasAll(['id', 'title', 'category', 'target', 'current', 'unit', 'xpReward', 'creditReward', 'stabilizeValue', 'status']) &&
+              data.id is string && data.id.size() <= 128 &&
+              data.title is string && data.title.size() <= 200 &&
+              data.category is string && data.category.size() <= 100 &&
+              data.target is number &&
+              data.current is number &&
+              data.unit is string && data.unit.size() <= 100 &&
+              data.xpReward is number &&
+              data.creditReward is number &&
+              data.stabilizeValue is number &&
+              data.status is string && data.status.size() <= 50;
+    }
+
+    function isValidLog(data) {
+       return data.keys().hasAll(['id', 'timestamp', 'patientName', 'specialty', 'result', 'vignette', 'userAnswer', 'correctAnswer', 'pearl']) &&
+              data.id is string && data.id.size() <= 128 &&
+              data.timestamp is string && data.timestamp.size() <= 100 &&
+              data.patientName is string && data.patientName.size() <= 100 &&
+              data.specialty is string && data.specialty.size() <= 100 &&
+              data.result is string && data.result.size() <= 50 &&
+              data.vignette is string && data.vignette.size() <= 5000 &&
+              data.userAnswer is string && data.userAnswer.size() <= 100 &&
+              data.correctAnswer is string && data.correctAnswer.size() <= 100 &&
+              data.pearl is string && data.pearl.size() <= 2000;
+    }
+
+    function isValidMood(data) {
+       return data.keys().hasAll(['timestamp', 'ratingValue', 'burnoutObserved', 'procrastinationTrigger']) &&
+              data.timestamp is string && data.timestamp.size() <= 100 &&
+              data.ratingValue is number &&
+              data.burnoutObserved is bool &&
+              data.procrastinationTrigger is string && data.procrastinationTrigger.size() <= 1000;
+    }
+
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow create: if isOwner(userId) && isValidId(userId) && isValidUserStats(request.resource.data);
+      allow update: if isOwner(userId) && isValidId(userId) && isValidUserStats(request.resource.data);
+      
+      match /missions/{docId} {
+         allow read: if isOwner(userId);
+         allow write: if isOwner(userId);
+      }
+
+      match /logs/{docId} {
+         allow read: if isOwner(userId);
+         allow write: if isOwner(userId);
+      }
+
+      match /moods/{docId} {
+         allow read: if isOwner(userId);
+         allow write: if isOwner(userId);
+      }
+    }
+  }
+}

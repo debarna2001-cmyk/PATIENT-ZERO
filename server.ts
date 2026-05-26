@@ -82,28 +82,26 @@ app.post("/api/cases/generate", async (req, res) => {
   }
 
   try {
-    const prompt = `Generate a rigorous, complex, high-yield clinical vignette case modeled after the NEET PG (Indian Postgraduate Medical Entrance) examination. 
-The subject category should be: "${chosenSpecialty}".
+    const prompt = `Generate an array of 5 high-yield clinical vignettes for NEET PG medical students. Specialty: ${chosenSpecialty}.
+Focus on life-or-death emergencies where quick decision making is required.
 
-The response must focus on emergency or high-stress medicine, involving simulated clinical decision-making. 
-
-Please follow these character/vibe attributes:
-- "patientName": An authentic sound-alike name for an Indian patient, e.g. "Arjun Sharma", "Amina Begum", "Dr. Kasturi".
-- "ageGender": e.g. "45-year-old Female", "62-year-old Male".
-- "chiefComplaint": A dramatic, brief summary of their acute agony, e.g., "Crushing substernal chest pressure for 2 hours with profuse diaphoresis."
-- "clinicalVignette": A detailed paragraph describing their initial emergency presentation, medical history, physical examination findings (like pupil reaction, breath sounds, reflexes, abdominal rigidity), and relevant vitals or clinical findings. Use high-yield clinical buzzwords (e.g. "water-hammer pulse", "clasp-knife rigidity", "currant-jelly stools") appropriate for NEET PG.
-- "labResults": An array of 2 to 4 crucial lab findings or diagnostic findings (e.g., "K+ level: 2.8 mEq/L", "ECG: ST-elevation in leads V1-V4", "Chest X-Ray: Thumb-print sign").
-- "options": An object with properties "A", "B", "C", and "D". Each option should present a plausible medical decision (e.g., choice of drug, initial resuscitation action, definitive management, surgical consult). Only ONE option is strictly correct based on the latest medical guidelines (Harrison's, Bailey & Love, Nelson guidelines).
+For each case, provide:
+- "patientName": A fictional realistic Indian name.
+- "ageGender": e.g., "45M"
+- "chiefComplaint": A dramatic, brief summary of their acute agony.
+- "clinicalVignette": A detailed paragraph describing their initial emergency presentation, medical history, physical examination, and relevant vitals or clinical findings. Use high-yield clinical buzzwords.
+- "labResults": An array of 2 to 4 crucial lab findings or diagnostic findings.
+- "options": An object with properties "A", "B", "C", and "D". Each option should present a plausible medical decision. Only ONE option is strictly correct.
 - "correctAnswer": Must be exactly one of "A", "B", "C", or "D".
-- "highYieldPearl": A 1-2 sentence golden NEET PG clinical pearl/mnemonic that will help students rapidly recall this disease or management choice.
-- "explanation": A structured, comprehensive feedback explaining why the correct option is standard of care, and explicitly naming why each of the other three premium options are incorrect or represent a life-threatening delay in this emergency context.
+- "highYieldPearl": A 1-2 sentence golden NEET PG clinical pearl/mnemonic.
+- "explanation": A structured, comprehensive feedback explaining why the correct option is standard of care.
 - "initialVitals": Realistic patient vitals on presentation, including:
-  - "hr": Heart rate in bpm (Range: 40 - 150)
-  - "bp": Blood pressure (Range: "70/40" - "210/120")
-  - "spo2": SpO2 in % (Range: 75 - 100)
+  - "hr": Heart rate in bpm (Range: 40 - 180)
+  - "bp": Blood pressure string (e.g. "90/60")
+  - "spo2": SpO2 percentage (Range: 70 - 100)
   - "temp": Temperature in Fahrenheit (Range: 96.0 - 105.0)
 
-Make sure the question requires active pathophysiological or pharmacological reasoning to solve, fitting the 'psychological survival of a resident doctors shift' theme. Avoid easy questions; these are medical PG level questions.`;
+Make sure the questions require active pathophysiological or pharmacological reasoning. Avoid easy questions; these are medical PG level questions.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3.5-flash",
@@ -112,63 +110,65 @@ Make sure the question requires active pathophysiological or pharmacological rea
         systemInstruction: "You are an elite, highly demanding medical residency examiner who has designed a clinical survival simulation for NEET PG postgraduate test prep. You output medically pristine, highly rigorous clinico-pathological vignettes.",
         responseMimeType: "application/json",
         responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            id: { type: Type.STRING },
-            specialty: { type: Type.STRING },
-            complexity: { type: Type.STRING },
-            patientName: { type: Type.STRING },
-            ageGender: { type: Type.STRING },
-            chiefComplaint: { type: Type.STRING },
-            clinicalVignette: { type: Type.STRING },
-            labResults: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-            },
-            options: {
-              type: Type.OBJECT,
-              properties: {
-                A: { type: Type.STRING },
-                B: { type: Type.STRING },
-                C: { type: Type.STRING },
-                D: { type: Type.STRING },
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              specialty: { type: Type.STRING },
+              complexity: { type: Type.STRING },
+              patientName: { type: Type.STRING },
+              ageGender: { type: Type.STRING },
+              chiefComplaint: { type: Type.STRING },
+              clinicalVignette: { type: Type.STRING },
+              labResults: {
+                type: Type.ARRAY,
+                items: { type: Type.STRING },
               },
-              required: ["A", "B", "C", "D"],
-            },
-            correctAnswer: { type: Type.STRING },
-            highYieldPearl: { type: Type.STRING },
-            explanation: { type: Type.STRING },
-            initialVitals: {
-              type: Type.OBJECT,
-              properties: {
-                hr: { type: Type.INTEGER },
-                bp: { type: Type.STRING },
-                spo2: { type: Type.INTEGER },
-                temp: { type: Type.NUMBER },
+              options: {
+                type: Type.OBJECT,
+                properties: {
+                  A: { type: Type.STRING },
+                  B: { type: Type.STRING },
+                  C: { type: Type.STRING },
+                  D: { type: Type.STRING },
+                },
+                required: ["A", "B", "C", "D"],
               },
-              required: ["hr", "bp", "spo2", "temp"],
+              correctAnswer: { type: Type.STRING },
+              highYieldPearl: { type: Type.STRING },
+              explanation: { type: Type.STRING },
+              initialVitals: {
+                type: Type.OBJECT,
+                properties: {
+                  hr: { type: Type.INTEGER },
+                  bp: { type: Type.STRING },
+                  spo2: { type: Type.INTEGER },
+                  temp: { type: Type.NUMBER },
+                },
+                required: ["hr", "bp", "spo2", "temp"],
+              },
             },
-          },
-          required: [
-            "specialty",
-            "complexity",
-            "patientName",
-            "ageGender",
-            "chiefComplaint",
-            "clinicalVignette",
-            "options",
-            "correctAnswer",
-            "highYieldPearl",
-            "explanation",
-            "initialVitals",
-          ],
+            required: [
+              "patientName",
+              "ageGender",
+              "chiefComplaint",
+              "clinicalVignette",
+              "options",
+              "correctAnswer",
+              "highYieldPearl",
+              "explanation",
+              "initialVitals",
+            ],
+          }
         },
       },
     });
 
-    const parsedData = JSON.parse(response.text.trim());
-    parsedData.id = parsedData.id || `ai-${Date.now()}`;
-    res.json(parsedData);
+    const rawText = response.text || "";
+    const cleanJson = rawText.replace(/```json/g, "").replace(/```/g, "").trim();
+    const parsedData = JSON.parse(cleanJson);
+    const mappedData = parsedData.map((d: any) => ({ ...d, id: `ai-${Date.now()}-${Math.floor(Math.random() * 1000)}`, specialty: chosenSpecialty, complexity: 'Urgent' }));
+    res.json(mappedData);
   } catch (error) {
     console.error("Gemini case generation failed. Resorting to local deck of survival scenarios...", error);
     // Serve a backup case so the user has an uninterrupted premium experience
@@ -176,6 +176,93 @@ Make sure the question requires active pathophysiological or pharmacological rea
     res.json({
       ...randomCase,
       id: `local-error-fallback-${Date.now()}`
+    });
+  }
+});
+
+app.post("/api/cases/suggestions", async (req, res) => {
+  const { sessionHistory } = req.body;
+  if (!ai || !sessionHistory || sessionHistory.length === 0) {
+    return res.json({ suggestions: ["Review Advanced Cardiac Life Support (ACLS)", "Review Acute Respiratory Distress Syndrome (ARDS)", "Review Status Epilepticus Protocols"] });
+  }
+
+  try {
+    const historySummary = (sessionHistory as any[]).map(sh => `Case: ${sh.case.clinicalVignette} - Solved: ${sh.success ? 'Yes' : 'No'}`).join("\n");
+    const prompt = `Based on these recently attempted medical clinical vignettes:
+${historySummary}
+Suggest exactly 3 high-yield theoretical topics the medical student should read to improve. Return a JSON object with 'suggestions' array.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        systemInstruction: "You are a residency mentor directing a student's study plan.",
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+             suggestions: { type: Type.ARRAY, items: { type: Type.STRING } }
+          },
+          required: ["suggestions"],
+        }
+      }
+    });
+
+    res.json(JSON.parse(response.text || '{"suggestions":[]}'));
+  } catch (error) {
+     res.json({ suggestions: ["Review ACLS protocols", "Review ARDS management", "Review Shock algorithms"] });
+  }
+});
+
+// 4. API Endpoint: AI Oversight / Performance Reviews
+app.post("/api/metrics/review", async (req, res) => {
+  const { stats, type } = req.body;
+  if (!ai) {
+    return res.json({ 
+      title: "Chief Resident Feedback",
+      content: `Your current fatigue index is ${stats?.burnoutIndex}%. Ensure you get enough sleep and complete cases consistently.`,
+      actionableAdvice: ["Maintain study streaks", "Take frequent breaks"]
+    });
+  }
+
+  try {
+    const prompt = `Generate a ${type} performance review for a medical student preparing for NEET PG.
+Student Stats: 
+- Cases Solved: ${stats.patientsSaved}
+- Burnout/Fatigue Index: ${stats.burnoutIndex}%
+- Current Streak: ${stats.shiftStreak}
+- Vitals Health Multiplier: ${stats.patientHealth}%
+- Activity Logs: ${JSON.stringify(stats.activityLogs)}
+- Sleep Logs: ${JSON.stringify(stats.sleepLogs)}
+- MCQ Logs: ${JSON.stringify(stats.mcqLogs)}
+- Video Logs: ${JSON.stringify(stats.videoLogs)}
+
+Give a tough but motivating review from an elite AI Chief Resident. Output a JSON with title, a paragraph of review content grading their resilience and study habits, and an array of 2 actionable advice points.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        systemInstruction: "You are an elite, highly demanding medical residency examiner who monitors student behavior, burnout, and case resolution. Give hard-hitting, clinical-style performance reviews.",
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+             title: { type: Type.STRING },
+             content: { type: Type.STRING },
+             actionableAdvice: { type: Type.ARRAY, items: { type: Type.STRING } }
+          },
+          required: ["title", "content", "actionableAdvice"],
+        }
+      }
+    });
+
+    res.json(JSON.parse(response.text || '{"title":"Review Failed","content":"Error generating review","actionableAdvice":[]}'));
+  } catch (error) {
+    res.json({ 
+      title: "System Fallback Review",
+      content: "You are pushing hard. Keep tracking your sleep to optimize cognitive load and avoid critical burnout.",
+      actionableAdvice: ["Rest appropriately", "Focus on high-yield pearls"]
     });
   }
 });

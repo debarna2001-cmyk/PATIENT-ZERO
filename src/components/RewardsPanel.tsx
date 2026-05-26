@@ -1,4 +1,4 @@
-import { Award, Lock, Star, ShieldCheck, BatteryCharging, BrainCircuit } from "lucide-react";
+import { Award, Lock, Star, ShieldCheck, BatteryCharging, BrainCircuit, Heart, Zap, Stethoscope, Medal, ShieldAlert, Crosshair, Trophy, Flame, Crown, Activity, HeartPulse } from "lucide-react";
 
 interface Props {
   xp: number;
@@ -8,10 +8,19 @@ interface Props {
 
 const BADGES = [
   { id: "b1", title: "First Blood", description: "Successfully stabilized your first critical patient.", condition: (c: Props) => c.patientsSaved >= 1, icon: <ShieldCheck className="w-6 h-6" /> },
-  { id: "b2", title: "Iron Focus", description: "Maintain a 3-day operational shift streak.", condition: (c: Props) => c.shiftStreak >= 3, icon: <BatteryCharging className="w-6 h-6" /> },
+  { id: "b2", title: "Bronze Lifesaver", description: "Save 5 patients on the simulation deck.", condition: (c: Props) => c.patientsSaved >= 5, icon: <Heart className="w-6 h-6" /> },
   { id: "b3", title: "Ward Veteran", description: "Achieve 10+ clinical saves.", condition: (c: Props) => c.patientsSaved >= 10, icon: <Star className="w-6 h-6" /> },
-  { id: "b4", title: "Diagnostic Genius", description: "Attain overall Level 3 (1500 XP).", condition: (c: Props) => c.xp >= 1500, icon: <BrainCircuit className="w-6 h-6" /> },
-  { id: "b5", title: "Unbreakable", description: "Hold a flawless 14-day study streak.", condition: (c: Props) => c.shiftStreak >= 14, icon: <Award className="w-6 h-6" /> },
+  { id: "b4", title: "Silver Scalpel", description: "Perform 25 successful stabilization procedures.", condition: (c: Props) => c.patientsSaved >= 25, icon: <Crosshair className="w-6 h-6" /> },
+  { id: "b5", title: "Gold Stethoscope", description: "Save 50 patients. A true asset to the department.", condition: (c: Props) => c.patientsSaved >= 50, icon: <Stethoscope className="w-6 h-6" /> },
+  { id: "b6", title: "Iron Focus", description: "Maintain a 3-day operational shift streak.", condition: (c: Props) => c.shiftStreak >= 3, icon: <BatteryCharging className="w-6 h-6" /> },
+  { id: "b7", title: "Unbreakable", description: "Hold a flawless 14-day study streak.", condition: (c: Props) => c.shiftStreak >= 14, icon: <Award className="w-6 h-6" /> },
+  { id: "b8", title: "Juggernaut", description: "Attain a 30-day streak. Your discipline is legendary.", condition: (c: Props) => c.shiftStreak >= 30, icon: <Flame className="w-6 h-6" /> },
+  { id: "b9", title: "Century Club", description: "Log 100 consecutive shifts. Unstoppable force.", condition: (c: Props) => c.shiftStreak >= 100, icon: <Crown className="w-6 h-6" /> },
+  { id: "b10", title: "Rising Star", description: "Reach 500 total XP parameters.", condition: (c: Props) => c.xp >= 500, icon: <Zap className="w-6 h-6" /> },
+  { id: "b11", title: "Diagnostic Genius", description: "Attain overall Level 3 (1500 XP).", condition: (c: Props) => c.xp >= 1500, icon: <BrainCircuit className="w-6 h-6" /> },
+  { id: "b12", title: "Chief Resident", description: "Amass 3000 XP. You command the wards now.", condition: (c: Props) => c.xp >= 3000, icon: <Medal className="w-6 h-6" /> },
+  { id: "b13", title: "Master Attending", description: "Clear 6000 XP barrier. Elite clinician status.", condition: (c: Props) => c.xp >= 6000, icon: <Activity className="w-6 h-6" /> },
+  { id: "b14", title: "Legend of the Wards", description: "10,000 XP accumulated. A living operational myth.", condition: (c: Props) => c.xp >= 10000, icon: <Trophy className="w-6 h-6" /> }
 ];
 
 export default function RewardsPanel(props: Props) {

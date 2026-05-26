@@ -8,10 +8,10 @@ interface Props {
 }
 
 const DEFAULT_REWARDS: RewardItem[] = [
-  { id: "r1", title: "1 Hour Netflix Show", cost: 1500, icon: "Ticket" },
-  { id: "r2", title: "Play Video Games (45 min)", cost: 1200, icon: "Gamepad2" },
-  { id: "r3", title: "Order Fast Food", cost: 3000, icon: "Pizza" },
-  { id: "r4", title: "Listen to Music (30 min guilt-free)", cost: 500, icon: "Music" },
+  { id: "r1", title: "1 Hour Movie Night / Show", cost: 7, icon: "Ticket" },
+  { id: "r2", title: "Play Video Games (45 min)", cost: 5, icon: "Gamepad2" },
+  { id: "r3", title: "Order Fast Food", cost: 12, icon: "Pizza" },
+  { id: "r4", title: "Listen to Music (30 min guilt-free)", cost: 2, icon: "Music" },
 ];
 
 export default function RewardStore({ credits, onRedeem }: Props) {
@@ -79,8 +79,8 @@ export default function RewardStore({ credits, onRedeem }: Props) {
              <ShoppingBag className="w-8 h-8 text-blue-600" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Reward Store</h2>
-            <p className="text-sm font-medium text-slate-500">Spend your hard-earned credits on real-life activities.</p>
+            <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100 tracking-tight">Reward Store & Purchasing Power</h2>
+            <p className="text-sm font-medium text-slate-500">Your clinical discipline translates directly into real-life purchasing power.</p>
           </div>
         </div>
         <div className="bg-slate-900 text-white px-6 py-4 rounded-2xl shadow-lg border border-slate-700 flex flex-col items-center min-w-[150px]">
@@ -148,7 +148,7 @@ export default function RewardStore({ credits, onRedeem }: Props) {
                     type="number" 
                     value={newCost}
                     onChange={(e) => setNewCost(e.target.value)}
-                    placeholder="e.g. 500"
+                    placeholder="e.g. 5"
                     min="1"
                     className="w-full bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl text-sm font-semibold outline-none focus:border-blue-500 transition-colors"
                   />
