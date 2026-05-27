@@ -6,6 +6,7 @@ import ShiftLog from "./components/ShiftLog";
 import ProtocolFormulary from "./components/ProtocolFormulary";
 import HelpManual from "./components/HelpManual";
 import { sound } from "./lib/audio";
+import { registerServiceWorker, triggerNotification } from "./lib/notifications";
 import { auth, db, signInWithGoogle, signOut, handleFirestoreError, OperationType } from "./lib/firebase";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 import { doc, getDoc, setDoc, deleteDoc, onSnapshot, collection } from "firebase/firestore";
@@ -25,6 +26,28 @@ import {
   AlertTriangle, Lightbulb, Volume2, VolumeX, Menu, LogOut, FileText, BarChart3, Settings, Calendar, Flame,
   Medal, Gift, Trophy, ShoppingBag, Gamepad2, Ticket, Pizza, Music, Cpu, LogIn
 } from "lucide-react";
+
+const AVAILABLE_SUBJECTS = [
+  "Medicine",
+  "Surgery",
+  "Obstetrics & Gynecology",
+  "Pediatrics",
+  "Pathology",
+  "Pharmacology",
+  "Microbiology",
+  "Anatomy",
+  "Physiology",
+  "Biochemistry",
+  "Forensic Medicine",
+  "Ophthalmology",
+  "ENT",
+  "Social & Preventive Medicine",
+  "Dermatology",
+  "Psychiatry",
+  "Orthopedics",
+  "Radiology",
+  "Anesthesia"
+];
 
 const DEFAULT_STATS: UserStats = {
   studentName: "Dr. Candidate",
@@ -93,6 +116,9 @@ export default function App() {
   }, [isDarkMode]);
 
   useEffect(() => {
+    // Register Service Worker for maximum mobile PWA / background notification reliability
+    registerServiceWorker();
+
     // Request Notification Permission
     if ("Notification" in window) {
       Notification.requestPermission();
@@ -101,12 +127,10 @@ export default function App() {
     const checkTime = () => {
       const now = new Date();
       if (now.getHours() === 8 && now.getMinutes() === 0 && now.getSeconds() < 10) {
-        if ("Notification" in window && Notification.permission === "granted") {
-           new Notification("0800 HRS: Morning Shift", {
-             body: "Your 5-case Triage Session is ready. Engage to stabilize the patient.",
-             icon: "/icon.png"
-           });
-        }
+        triggerNotification("0800 HRS: Morning Shift", {
+          body: "Your 5-case Triage Session is ready. Engage to stabilize the patient.",
+          tag: "morning-shift-reminder"
+        });
       }
     };
     const timerId = setInterval(checkTime, 10000);
@@ -114,7 +138,6 @@ export default function App() {
   }, []);
 
   const handleTabChange = (tab: typeof activeTab) => {
-    sound.click();
     setActiveTab(tab);
   };
 
@@ -465,7 +488,7 @@ export default function App() {
       const copyMissions = [...missions];
       const targetM = copyMissions.find(m => m.category === "MCQ");
       if (targetM && targetM.status === "Pending") {
-        const adjustedTarget = prev.studyMode === 'Duty' ? Math.max(1, Math.ceil(targetM.target / 2)) : prev.studyMode === 'Rest' ? 0 : targetM.target;
+        const adjustedTarget = stats.studyMode === 'Duty' ? Math.max(1, Math.ceil(targetM.target / 2)) : stats.studyMode === 'Rest' ? 0 : targetM.target;
         targetM.current = Math.min(adjustedTarget, targetM.current + 10);
         if (targetM.current >= adjustedTarget) targetM.status = "Completed";
         updateMissions(copyMissions);
@@ -474,7 +497,7 @@ export default function App() {
       const copyMissions = [...missions];
       const targetM = copyMissions.find(m => m.category === "Lectures");
       if (targetM && targetM.status === "Pending") {
-        const adjustedTarget = prev.studyMode === 'Duty' ? Math.max(1, Math.ceil(targetM.target / 2)) : prev.studyMode === 'Rest' ? 0 : targetM.target;
+        const adjustedTarget = stats.studyMode === 'Duty' ? Math.max(1, Math.ceil(targetM.target / 2)) : stats.studyMode === 'Rest' ? 0 : targetM.target;
         targetM.current = Math.min(adjustedTarget, targetM.current + 1);
         if (targetM.current >= adjustedTarget) targetM.status = "Completed";
         updateMissions(copyMissions);
@@ -613,7 +636,6 @@ export default function App() {
 
   const advanceToNextPatient = () => {
     if (triageQueue.length > 0) {
-      sound.click();
       const nextCase = triageQueue[0];
       setTriageQueue(triageQueue.slice(1));
       setCurrentCase(nextCase);
@@ -832,10 +854,10 @@ export default function App() {
             </div>
             <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight text-center mb-2">Patient Zero</h1>
             <p className="text-sm font-medium text-slate-500 text-center mb-8">Access the secure clinical simulation and sync your progress to the cloud.</p>
-            <button onClick={signInWithGoogle} className="w-full py-3 px-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-3 active:scale-[0.98]">
+            <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} onClick={signInWithGoogle} className="w-full py-3 px-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-3 active:scale-[0.98]">
                <LogIn className="w-5 h-5" />
                Sign in with Google
-            </button>
+            </motion.button>
          </div>
       </div>
     )
@@ -884,11 +906,11 @@ export default function App() {
                </div>
             </div>
             <div className="flex items-center gap-2">
-               <button onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-cyan-400 border border-slate-200 dark:border-slate-700">
+               <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-cyan-400 border border-slate-200 dark:border-slate-700">
                   <Activity className="w-4 h-4" />
-               </button>
+               </motion.button>
                <div className="relative">
-                 <button 
+                 <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} 
                    onClick={() => setModeMenuOpen(m => !m)}
                    className="px-3 py-1.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-cyan-400 border border-slate-200 dark:border-slate-700 text-xs font-bold uppercase tracking-wider flex items-center justify-between min-w-[140px] gap-2 transition-colors hover:bg-slate-200 dark:hover:bg-slate-700"
                  >
@@ -899,7 +921,7 @@ export default function App() {
                      {stats.studyMode === 'Rest' ? 'Recovery' : stats.studyMode === 'Duty' ? 'Intensive On-Call' : 'Regular Shift'}
                    </span>
                    <ChevronDown className="w-3 h-3" />
-                 </button>
+                 </motion.button>
                  <AnimatePresence>
                    {modeMenuOpen && (
                      <>
@@ -914,7 +936,7 @@ export default function App() {
                            {id: 'Duty', label: 'Intensive On-Call', icon: <ShieldAlert className="w-4 h-4 text-orange-500" />},
                            {id: 'Rest', label: 'Recovery Shift', icon: <Heart className="w-4 h-4 text-rose-500" />}
                          ].map(mode => (
-                           <button key={mode.id}
+                           <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} key={mode.id}
                              onClick={() => {
                                const nextMode = mode.id as 'Normal' | 'Duty' | 'Rest';
                                modifyStats(prev => {
@@ -966,7 +988,7 @@ export default function App() {
                                 <span className="text-sm font-bold tracking-tight text-slate-700 dark:text-slate-300">{mode.label}</span>
                               </div>
                               {stats.studyMode === mode.id && <div className="w-2 h-2 rounded-full bg-cyan-400" />}
-                           </button>
+                           </motion.button>
                          ))}
                        </motion.div>
                      </>
@@ -1082,7 +1104,7 @@ export default function App() {
                   <div className="flex flex-col gap-4">
                     <h4 className="text-base font-bold text-slate-800 dark:text-slate-200 tracking-tight">Execute Clinical Protocols</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
-                      <button
+                      <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
                         onClick={() => { setActiveTab("triage"); startTriageSession(); }}
                         disabled={isGenerating}
                         className="p-6 border border-white/50 backdrop-blur-md bg-white dark:bg-slate-900/40 hover:bg-white dark:bg-slate-900/60 hover:border-rose-300 hover:shadow-lg text-left rounded-3xl transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1092,9 +1114,9 @@ export default function App() {
                         <p className="text-sm text-slate-500 font-medium leading-relaxed">
                           Solve 5 back-to-back emergencies.
                         </p>
-                      </button>
+                      </motion.button>
 
-                      <button
+                      <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
                         onClick={() => { setManualLogType("QuickMCQ"); setManualLogModalOpen(true); setSelectedSubjects([]); }}
                         className="p-6 border border-white/50 backdrop-blur-md bg-white dark:bg-slate-900/40 hover:bg-white dark:bg-slate-900/60 hover:border-orange-300 hover:shadow-lg text-left rounded-3xl transition-all group"
                       >
@@ -1103,9 +1125,9 @@ export default function App() {
                         <p className="text-sm text-slate-500 font-medium leading-relaxed">
                           Log 10 practice MCQs. (+15% Health)
                         </p>
-                      </button>
+                      </motion.button>
 
-                      <button
+                      <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
                         onClick={() => { setManualLogType("FullStudy"); setManualLogModalOpen(true); setSelectedSubjects([]); }}
                         className="p-6 border border-white/50 backdrop-blur-md bg-white dark:bg-slate-900/40 hover:bg-white dark:bg-slate-900/60 hover:border-purple-300 hover:shadow-lg text-left rounded-3xl transition-all group"
                       >
@@ -1114,9 +1136,9 @@ export default function App() {
                         <p className="text-sm text-slate-500 font-medium leading-relaxed">
                           Log 1 hour video study. (+35% Health)
                         </p>
-                      </button>
+                      </motion.button>
 
-                      <button
+                      <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
                         onClick={() => { setActiveTab("vault"); }}
                         className="p-6 border border-white/50 backdrop-blur-md bg-white dark:bg-slate-900/40 hover:bg-white dark:bg-slate-900/60 hover:border-blue-300 hover:shadow-lg text-left rounded-3xl transition-all group"
                       >
@@ -1125,9 +1147,9 @@ export default function App() {
                         <p className="text-sm text-slate-500 font-medium leading-relaxed">
                           Review clinical pearls from past cases.
                         </p>
-                      </button>
+                      </motion.button>
 
-                      <button
+                      <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
                         onClick={() => setShowSleepModal(true)}
                         className="p-6 border border-white/50 backdrop-blur-md bg-white dark:bg-slate-900/40 hover:bg-white dark:bg-slate-900/60 hover:border-emerald-300 hover:shadow-lg text-left rounded-3xl transition-all group"
                       >
@@ -1136,7 +1158,7 @@ export default function App() {
                         <p className="text-sm text-slate-500 font-medium leading-relaxed">
                           Reset exhaustion and rest your brain.
                         </p>
-                      </button>
+                      </motion.button>
                     </div>
                   </div>
 
@@ -1157,7 +1179,7 @@ export default function App() {
                         <label className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-4 block">Current Resilience (1: Exhausted, 5: Radiant)</label>
                         <div className="flex items-center gap-4">
                           {[1, 2, 3, 4, 5].map((val) => (
-                            <button
+                            <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
                               key={val}
                               type="button"
                               onClick={() => setMoodRating(val)}
@@ -1168,7 +1190,7 @@ export default function App() {
                               }`}
                             >
                               {val}
-                            </button>
+                            </motion.button>
                           ))}
                         </div>
                       </div>
@@ -1184,12 +1206,12 @@ export default function App() {
                         />
                       </div>
 
-                      <button
+                      <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
                         type="submit"
                         className="py-4 w-full bg-purple-600 hover:bg-purple-500 text-white rounded-2xl font-bold text-sm tracking-wide shadow-lg shadow-purple-600/20 transition-all"
                       >
                         Submit Adjustment Report
-                      </button>
+                      </motion.button>
                     </form>
 
                     {moodLogs.length > 0 && (
@@ -1225,12 +1247,12 @@ export default function App() {
                   <div className="border border-white/60 bg-white dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl p-8 flex flex-col flex-1 shadow-xl h-full">
                     <div className="flex justify-between items-center mb-6">
                       <h4 className="font-bold text-slate-900 dark:text-slate-100 text-lg">Active Directives</h4>
-                      <button 
+                      <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} 
                         onClick={() => handleTabChange("missions")}
                         className="text-blue-600 text-sm hover:text-blue-700 font-bold bg-blue-50 px-3 py-1.5 rounded-lg transition"
                       >
                         Manage
-                      </button>
+                      </motion.button>
                     </div>
                     
                     <div className="flex flex-col gap-4">
@@ -1309,12 +1331,12 @@ export default function App() {
                   </select>
                   {/* Keep small admit button just in case, or hide it if we add large button? Let's hide it if !currentCase so they only see the big one. */}
                   {currentCase && (
-                    <button
+                    <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
                       disabled={true}
                       className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600/50 text-white text-sm font-bold rounded-xl shadow-lg shadow-blue-500/20 transition-all shrink-0 cursor-not-allowed cursor-default"
                     >
                       Session Active
-                    </button>
+                    </motion.button>
                   )}
                 </div>
               </div>
@@ -1327,7 +1349,7 @@ export default function App() {
                       </div>
                       <h4 className="font-black text-slate-900 dark:text-slate-100 text-2xl uppercase tracking-tight mb-2">Initiate Shift</h4>
                       <p className="text-sm font-medium text-slate-500 mb-8 max-w-md">Begin a rigorous 5-case clinical triage session. Answer emergencies back-to-back to stabilize the patient health meter.</p>
-                      <button
+                      <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
                         onClick={startTriageSession}
                         disabled={isGenerating}
                         className="flex items-center justify-center gap-3 px-10 py-5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-100 dark:bg-white dark:hover:bg-slate-200 dark:disabled:bg-slate-800/50 disabled:text-slate-400 dark:text-slate-900 text-white text-sm font-bold rounded-2xl shadow-xl shadow-slate-900/10 transition-all shrink-0 uppercase tracking-widest"
@@ -1337,7 +1359,7 @@ export default function App() {
                         ) : (
                           <><ShieldAlert className="w-5 h-5" /> Start Morning Shift (5 Cases)</>
                         )}
-                      </button>
+                      </motion.button>
                     </div>
                  </div>
               )}
@@ -1363,12 +1385,12 @@ export default function App() {
                                ))}
                              </ul>
                              <div className="mt-8 flex justify-center">
-                                <button
+                                <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
                                    onClick={() => { setShiftSuggestions(null); setSessionHistory([]); }}
                                    className="px-8 py-3 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 font-bold rounded-xl shadow transition-all uppercase tracking-wide text-sm"
                                 >
                                    Accept Recommendations
-                                </button>
+                                </motion.button>
                              </div>
                           </div>
                        )}
@@ -1422,7 +1444,7 @@ export default function App() {
                       }
 
                       return (
-                        <button
+                        <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
                           key={key}
                           onClick={() => !revealed && setSelectedAnswer(key as any)}
                           disabled={revealed}
@@ -1430,20 +1452,20 @@ export default function App() {
                         >
                           <span className={`font-bold shrink-0 w-6 text-center ${revealed && isCorrect ? 'text-emerald-600' : isSelected && !revealed ? 'text-blue-600' : 'text-slate-400'}`}>{key}.</span>
                           <span className="leading-snug">{text}</span>
-                        </button>
+                        </motion.button>
                       );
                     })}
                   </div>
 
                   {!revealed ? (
                     <div className="mt-10 flex justify-end">
-                      <button
+                      <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
                         onClick={submitRemedy}
                         disabled={!selectedAnswer}
                         className="px-10 py-4 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-100 dark:bg-slate-800/50 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-bold rounded-2xl shadow-xl shadow-slate-900/10 transition-all text-sm tracking-wide uppercase"
                       >
                         Submit Medical Diagnosis
-                      </button>
+                      </motion.button>
                     </div>
                   ) : (
                     <div className="mt-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -1474,19 +1496,19 @@ export default function App() {
                       </div>
                       <div className="mt-8 flex justify-end gap-3">
                         {triageQueue.length > 0 ? (
-                          <button
+                          <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
                             onClick={advanceToNextPatient}
                             className="px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl shadow-lg shadow-blue-600/20 transition-all text-sm tracking-wide uppercase flex items-center justify-center gap-2"
                           >
                             Next Emergency <ChevronRight className="w-5 h-5" />
-                          </button>
+                          </motion.button>
                         ) : (
-                          <button
+                          <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
                             onClick={endShift}
                             className="px-8 py-4 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-100 dark:bg-white dark:hover:bg-slate-200 dark:text-slate-900 text-white font-bold rounded-2xl shadow-lg shadow-blue-600/20 transition-all text-sm tracking-wide uppercase"
                           >
                             End Shift
-                          </button>
+                          </motion.button>
                         )}
                       </div>
                     </div>
@@ -1520,7 +1542,7 @@ export default function App() {
               <div className="mt-10 pt-10 border-t border-slate-200 dark:border-slate-800">
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="font-bold text-slate-900 dark:text-slate-100 text-xl tracking-tight">Clinical Operation History</h3>
-                  <button onClick={handleClearLogs} className="text-xs font-bold text-rose-600 hover:text-rose-700 transition px-4 py-2 rounded-xl bg-rose-50 border border-rose-200">Purge Logs</button>
+                  <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} onClick={handleClearLogs} className="text-xs font-bold text-rose-600 hover:text-rose-700 transition px-4 py-2 rounded-xl bg-rose-50 border border-rose-200">Purge Logs</motion.button>
                 </div>
                 <ShiftLog logs={logs} />
               </div>
@@ -1669,8 +1691,8 @@ export default function App() {
                     </div>
                   </div>
                   <div className="flex gap-4">
-                    <button type="button" onClick={() => setShowSleepModal(false)} className="flex-1 py-4 font-bold rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition uppercase text-sm tracking-widest whitespace-nowrap">Cancel</button>
-                    <button type="submit" className="flex-[2] py-4 font-bold rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 transition uppercase text-sm tracking-widest">Execute Rest</button>
+                    <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} type="button" onClick={() => setShowSleepModal(false)} className="flex-1 py-4 font-bold rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition uppercase text-sm tracking-widest whitespace-nowrap">Cancel</motion.button>
+                    <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} type="submit" className="flex-[2] py-4 font-bold rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 transition uppercase text-sm tracking-widest">Execute Rest</motion.button>
                   </div>
                 </form>
               </motion.div>
@@ -1682,7 +1704,7 @@ export default function App() {
         <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 z-50 shadow-[0_-5px_15px_rgba(0,0,0,0.1)] dark:shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
            <div className="flex items-center justify-around max-w-lg mx-auto w-full px-2 py-1">
              {NAV_TABS.map(tab => (
-                 <button
+                 <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
                    key={tab.id}
                    onClick={() => {
                      handleTabChange(tab.id as any);
@@ -1696,7 +1718,7 @@ export default function App() {
                  >
                     <div className={`${activeTab === tab.id ? 'animate-bounce drop-shadow-[0_0_8px_rgba(34,211,238,0.8)]' : ''}`}>{tab.icon}</div>
                     <span className="text-[9px] font-black tracking-widest uppercase">{tab.label}</span>
-                 </button>
+                 </motion.button>
              ))}
            </div>
         </nav>
@@ -1731,7 +1753,7 @@ export default function App() {
                     {["General / All", ...AVAILABLE_SUBJECTS].map(sub => {
                        const isSelected = selectedSubjects.includes(sub);
                        return (
-                         <button
+                         <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
                            type="button"
                            key={sub}
                            onClick={() => {
@@ -1749,14 +1771,14 @@ export default function App() {
                            className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${isSelected ? 'bg-cyan-600 text-white shadow-md' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-700'}`}
                          >
                             {sub}
-                         </button>
+                         </motion.button>
                        )
                     })}
                   </div>
                   
                   <div className="flex gap-4">
-                    <button type="button" onClick={() => setManualLogModalOpen(false)} className="flex-1 py-4 font-bold rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition uppercase text-sm tracking-widest whitespace-nowrap">Cancel</button>
-                    <button type="submit" className="flex-[2] py-4 font-bold rounded-2xl bg-cyan-600 hover:bg-cyan-500 text-white shadow-lg shadow-cyan-500/20 transition uppercase text-sm tracking-widest">Save Log</button>
+                    <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} type="button" onClick={() => setManualLogModalOpen(false)} className="flex-1 py-4 font-bold rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition uppercase text-sm tracking-widest whitespace-nowrap">Cancel</motion.button>
+                    <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} type="submit" className="flex-[2] py-4 font-bold rounded-2xl bg-cyan-600 hover:bg-cyan-500 text-white shadow-lg shadow-cyan-500/20 transition uppercase text-sm tracking-widest">Save Log</motion.button>
                   </div>
                 </form>
               </motion.div>

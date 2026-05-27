@@ -1,3 +1,5 @@
+import { sound } from "../lib/audio";
+import { motion } from "motion/react";
 import React, { useState, useEffect } from "react";
 import { Ticket, Gamepad2, Pizza, Music, ShoppingBag } from "lucide-react";
 import { RewardItem, RedeemedReward } from "../types";
@@ -110,7 +112,7 @@ export default function RewardStore({ credits, onRedeem }: Props) {
                       <span className="text-blue-600 font-bold text-sm bg-blue-50 px-2 py-0.5 rounded inline-block mt-1">{r.cost} CR</span>
                     </div>
                   </div>
-                  <button
+                  <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
                     onClick={() => handleRedeem(r)}
                     disabled={!canAfford}
                     className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all ${
@@ -120,7 +122,7 @@ export default function RewardStore({ credits, onRedeem }: Props) {
                     }`}
                   >
                     {canAfford ? "Redeem Reward" : "Insufficient Credits"}
-                  </button>
+                  </motion.button>
                 </div>
               )
             })}
@@ -153,9 +155,9 @@ export default function RewardStore({ credits, onRedeem }: Props) {
                     className="w-full bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl text-sm font-semibold outline-none focus:border-blue-500 transition-colors"
                   />
                </div>
-               <button type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm py-2.5 rounded-xl shadow-md transition-colors">
+               <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm py-2.5 rounded-xl shadow-md transition-colors">
                   Create
-               </button>
+               </motion.button>
             </form>
           </div>
 

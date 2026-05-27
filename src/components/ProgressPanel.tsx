@@ -1,3 +1,5 @@
+import { sound } from "../lib/audio";
+import { motion } from "motion/react";
 import { UserStats } from "../types";
 import { Crosshair, HelpCircle, Award, Target, AlertOctagon, HeartPulse, Zap, Bot, Loader2, Sparkles } from "lucide-react";
 import { useState } from "react";
@@ -228,27 +230,27 @@ export default function ProgressPanel({ stats }: Props) {
         )}
 
         <div className="flex gap-3 mb-6 relative z-10 overflow-x-auto pb-2">
-          <button 
+          <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} 
             disabled={reviewLoading}
             onClick={() => reqReview('Daily')}
             className="px-5 py-2.5 bg-slate-100/50 dark:bg-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 hover:text-indigo-600 dark:hover:text-indigo-400 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold tracking-wide transition-all uppercase whitespace-nowrap disabled:opacity-50 flex items-center gap-2"
           >
             End of Day Review
-          </button>
-          <button 
+          </motion.button>
+          <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} 
             disabled={reviewLoading}
             onClick={() => reqReview('Weekly')}
             className="px-5 py-2.5 bg-slate-100/50 dark:bg-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 hover:text-indigo-600 dark:hover:text-indigo-400 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold tracking-wide transition-all uppercase whitespace-nowrap disabled:opacity-50 flex items-center gap-2"
           >
             Weekly Evaluation
-          </button>
-          <button 
+          </motion.button>
+          <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} 
              disabled={reviewLoading}
              onClick={() => reqReview('Monthly')}
              className="px-5 py-2.5 bg-slate-100/50 dark:bg-slate-800/50 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 hover:text-indigo-600 dark:hover:text-indigo-400 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-bold tracking-wide transition-all uppercase whitespace-nowrap disabled:opacity-50 flex items-center gap-2"
           >
             Monthly Appraisal
-          </button>
+          </motion.button>
         </div>
 
         {reviewLoading && (
