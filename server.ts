@@ -239,11 +239,23 @@ Student Stats:
 
 Give a tough but motivating review from an elite AI Chief Resident. Output a JSON with title, a paragraph of review content grading their resilience and study habits, and an array of 2 actionable advice points.`;
 
+    const daysRemaining = stats?.daysToExam ?? 365;
+    const burnoutLevel = stats?.burnoutIndex ?? 0;
+
+    const dynamicSystemInstruction =
+      daysRemaining < 30 ?
+        `You are a wartime chief resident with ${daysRemaining} days left before your student's NEET PG exam. Be terse, mission-critical, and ruthless about priorities. No encouragement unless the numbers justify it.` :
+      daysRemaining < 90 || burnoutLevel > 65 ?
+        `You are an urgent chief resident. Your student has ${daysRemaining} days remaining. Be direct and demanding. Identify what must change immediately.` :
+      daysRemaining < 180 ?
+        `You are a demanding chief resident with ${daysRemaining} days remaining. Acknowledge what is working but push hard on gaps. Be analytical, not motivational.` :
+        `You are a mentoring chief resident in the early orientation phase with ${daysRemaining} days remaining. Focus on building habits and systems, not panic.`;
+
     const response = await ai.models.generateContent({
       model: "gemini-3.5-flash",
       contents: prompt,
       config: {
-        systemInstruction: "You are an elite, highly demanding medical residency examiner who monitors student behavior, burnout, and case resolution. Give hard-hitting, clinical-style performance reviews.",
+        systemInstruction: dynamicSystemInstruction,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,

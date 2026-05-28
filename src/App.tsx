@@ -7,6 +7,7 @@ import ProtocolFormulary from "./components/ProtocolFormulary";
 import HelpManual from "./components/HelpManual";
 import { sound } from "./lib/audio";
 import { registerServiceWorker, triggerNotification } from "./lib/notifications";
+import { getNarrativeState, NarrativeState } from './lib/narrative';
 import { auth, db, signInWithGoogle, signOut, handleFirestoreError, OperationType } from "./lib/firebase";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 import { doc, getDoc, setDoc, deleteDoc, onSnapshot, collection } from "firebase/firestore";
@@ -932,6 +933,8 @@ export default function App() {
     )
   }
 
+  const narrativeState = getNarrativeState(stats);
+
   return (
     <div className="h-screen w-full font-sans flex selection:bg-cyan-500/30 overflow-hidden dark:bg-slate-950 dark:text-slate-200 bg-slate-50 dark:bg-slate-950/50 text-slate-900 dark:text-slate-100 relative">
       <div className="absolute inset-0 pointer-events-none hidden dark:block bg-cyber-grid z-0"></div>
@@ -1080,6 +1083,11 @@ export default function App() {
               transition={{ duration: 0.2 }}
               className="flex flex-col gap-8"
             >
+              {narrativeState.activeNarrativeEvent && (
+                <div className="p-4 rounded-2xl border border-cyan-500/40 bg-cyan-950/40 text-cyan-300 text-sm font-bold tracking-wide">
+                  {narrativeState.activeNarrativeEvent}
+                </div>
+              )}
               {/* Top Row: Vitals Monitor */}
               <div className="w-full">
                 <VitalsMonitor
@@ -1109,14 +1117,14 @@ export default function App() {
                     <div className="flex justify-between items-start mb-8 border-b border-slate-700/50 pb-5 relative z-10">
                       <div>
                         <h3 className="font-bold text-slate-100 text-xl tracking-wide flex items-center gap-2"><Cpu className="w-5 h-5 text-cyan-400" /> Bio-Sim Core</h3>
-                        <p className="text-sm text-slate-400 font-medium">Clinical readiness & neural load tracking</p>
+                        <p className="text-sm text-slate-400 font-medium">{narrativeState.missionBriefing}</p>
                       </div>
                       <span className={`text-xs font-bold px-3 py-1.5 rounded border shadow-sm tracking-widest uppercase ${
                         isSimulationCritical 
                           ? "bg-red-900/50 text-red-400 border-red-500/50" 
                           : "bg-emerald-900/50 text-emerald-400 border-emerald-500/50 shadow-[0_0_10px_rgba(16,185,129,0.3)]"
                       }`}>
-                        {isSimulationCritical ? "CRITICAL NEURAL LOAD" : "VITALS SECURE"}
+                        {narrativeState.phaseLabel}
                       </span>
                     </div>
 
