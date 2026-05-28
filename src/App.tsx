@@ -51,12 +51,24 @@ const AVAILABLE_SUBJECTS = [
   "Anesthesia"
 ];
 
+const calculateDaysToExam = (targetDateStr: string) => {
+  if (!targetDateStr) return 0;
+  const target = new Date(targetDateStr);
+  target.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diff = target.getTime() - today.getTime();
+  return Math.max(0, Math.floor(diff / (1000 * 60 * 60 * 24)));
+};
+
+const DEFAULT_TARGET_DATE = "2027-03-01";
+
 const DEFAULT_STATS: UserStats = {
   studentName: "Dr. Candidate",
   targetSpecialty: "Emergency Medicine",
   targetExamYear: 2027,
-  targetExamDate: "2027-03-01",
-  daysToExam: 365,
+  targetExamDate: DEFAULT_TARGET_DATE,
+  daysToExam: calculateDaysToExam(DEFAULT_TARGET_DATE),
   lastMissionResetDate: new Date().toISOString().split("T")[0],
   patientHealth: 100,
   burnoutIndex: 0,
@@ -170,6 +182,7 @@ export default function App() {
     const statsUnsub = onSnapshot(doc(db, "users", authUser.uid), (docSnap) => {
         if (docSnap.exists()) {
              const loadedStats = { ...DEFAULT_STATS, ...docSnap.data() } as UserStats;
+             loadedStats.daysToExam = calculateDaysToExam(loadedStats.targetExamDate);
              const today = new Date().toISOString().split("T")[0];
              
              const now = new Date();
@@ -319,9 +332,6 @@ export default function App() {
         setMoodLogs(snapshot.docs.map(d => d.data() as MoodLog).sort((a,b) => b.timestamp.localeCompare(a.timestamp)));
     }, (e) => handleFirestoreError(e, OperationType.GET, "moods"));
 
-    // We can still keep activeCase in localStorage for offline caching or simplicity since it's transient
-    const activeCase = localStorage.getItem("patient_zero_v2_active_case");
-    if (activeCase && activeCase !== "null") try { setCurrentCase(JSON.parse(activeCase)); } catch (e) {}
 
     return () => {
        statsUnsub();
@@ -652,7 +662,7 @@ export default function App() {
 
   const handleUpdateDate = (dateStr: string) => {
     modifyStats((prev) => {
-      const next = { ...prev, targetExamDate: dateStr };
+      const next = { ...prev, targetExamDate: dateStr, daysToExam: calculateDaysToExam(dateStr) };
       return next;
     });
   };
@@ -663,7 +673,6 @@ export default function App() {
     setMissions(DEFAULT_MISSIONS.map(m => ({ ...m })));
     setLogs([]);
     setMoodLogs([]);
-    setCurrentCase(null);
     setActiveTab("dashboard");
     
     if (authUser) {
@@ -894,7 +903,7 @@ export default function App() {
               <div className="w-full">
                 <VitalsMonitor
                   vitals={currentVitals}
-                  status={stats.patientHealth <= 0 ? "flatlined" : vitalStatus === "stabilized" ? "stabilized" : "active"}
+                  status={stats.patientHealth <= 0 ? "flatlined" : "active"}
                   isCritical={isSimulationCritical}
                 />
               </div>
@@ -984,8 +993,7 @@ export default function App() {
                     <h4 className="text-base font-bold text-slate-800 dark:text-slate-200 tracking-tight">Immediate Interventions</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
                       <motion.button whileTap={{ scale: 0.95 }}
-                        onClick={() => { setActiveTab("triage"); startTriageSession(); }}
-                        disabled={isGenerating}
+                        onClick={() => { setActiveTab("triage"); }}
                         className="p-6 border border-white/50 backdrop-blur-md bg-white dark:bg-slate-900/40 hover:bg-white dark:bg-slate-900/60 hover:border-rose-300 hover:shadow-lg text-left rounded-3xl transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <ShieldAlert className="w-7 h-7 text-rose-500 mb-4 group-hover:scale-110 transition-transform" />
@@ -1339,6 +1347,10 @@ export default function App() {
                 studentName={stats.studentName}
                 targetSpecialty={stats.targetSpecialty}
                 targetExamDate={stats.targetExamDate || ""}
+                stats={stats}
+                missions={missions}
+                logs={logs}
+                moodLogs={moodLogs}
                 onUpdateDate={handleUpdateDate} 
                 onUpdateProfile={handleUpdateProfile}
                 onHardReset={handleHardReset} 

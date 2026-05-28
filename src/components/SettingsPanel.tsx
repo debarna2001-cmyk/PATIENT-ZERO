@@ -1,20 +1,25 @@
 import { sound } from "../lib/audio";
 import { motion } from "motion/react";
-import { AlertOctagon, RefreshCw, Save, Bell } from "lucide-react";
+import { AlertOctagon, RefreshCw, Save, Bell, Download } from "lucide-react";
 import { useState, useEffect } from "react";
 import { getNotificationPermission, requestNotificationPermission, triggerNotification } from "../lib/notifications";
+import { UserStats, Mission, EmergencyLog, MoodLog } from "../types";
 
 interface Props {
   targetExamDate: string;
   studentName: string;
   targetSpecialty: string;
+  stats?: UserStats;
+  missions?: Mission[];
+  logs?: EmergencyLog[];
+  moodLogs?: MoodLog[];
   onUpdateDate: (dateStr: string) => void;
   onUpdateProfile: (name: string, specialty: string, year: number) => void;
   onHardReset: () => void;
   onSignOut: () => void;
 }
 
-export default function SettingsPanel({ targetExamDate, studentName, targetSpecialty, onUpdateDate, onUpdateProfile, onHardReset, onSignOut }: Props) {
+export default function SettingsPanel({ targetExamDate, studentName, targetSpecialty, stats, missions, logs, moodLogs, onUpdateDate, onUpdateProfile, onHardReset, onSignOut }: Props) {
   const [date, setDate] = useState(targetExamDate);
   const [name, setName] = useState(studentName);
   const [specialty, setSpecialty] = useState(targetSpecialty);
@@ -78,6 +83,31 @@ export default function SettingsPanel({ targetExamDate, studentName, targetSpeci
     if (confirm("WARNING: This will wipe all persistence storage. Are you sure?")) {
       onHardReset();
     }
+  };
+
+  const handleExportData = () => {
+    const exportData = {
+      exportedAt: new Date().toISOString(),
+      stats: stats,
+      missions: missions,
+      emergencyLogs: logs,
+      moodLogs: moodLogs
+    };
+    
+    const jsonStr = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([jsonStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    
+    const dateStr = new Date().toISOString().split("T")[0];
+    const filename = `patient-zero-export-${dateStr}.json`;
+    
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -190,7 +220,7 @@ export default function SettingsPanel({ targetExamDate, studentName, targetSpeci
              </div>
           </div>
 
-          <div className="text-xs text-slate-400 font-medium space-y-2 border-t border-slate-800 pt-4">
+           <div className="text-xs text-slate-400 font-medium space-y-2 border-t border-slate-800 pt-4">
              <h4 className="font-bold text-slate-300 uppercase tracking-wider">Why did I not get my notification?</h4>
              <ul className="list-disc pl-5 space-y-1.5 text-slate-400 font-medium">
                 <li><strong className="text-slate-300">Tab Active Required</strong>: These are client-side browser notifications. The app must be open in a browser tab at 08:00 AM to trigger. If the device was asleep or the tab was closed, the timer is paused and the alert won't fire.</li>
@@ -198,6 +228,26 @@ export default function SettingsPanel({ targetExamDate, studentName, targetSpeci
                 <li><strong className="text-slate-300">Permission Setting</strong>: Ensure system alerts are set to "Allow" in your browser address bar. Click "Request Link" or "Test Notification" above to test immediately.</li>
              </ul>
           </div>
+        </div>
+      </div>
+
+      <div className="bg-slate-900/40 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-8 shadow-xl">
+        <h3 className="font-bold text-cyan-400 text-xl tracking-widest uppercase border-b border-slate-700 pb-4 mb-6 flex items-center gap-2">
+          <Download className="w-5 h-5 text-cyan-400" /> Data Export
+        </h3>
+        
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
+           <div>
+             <h4 className="font-bold text-slate-300">Export Simulation Data</h4>
+             <p className="text-sm text-slate-500 font-medium mt-1">Download a local JSON backup of your stats, logs, and missions.</p>
+           </div>
+           <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} 
+             onClick={handleExportData}
+             className="px-6 py-3.5 bg-cyan-600 hover:bg-cyan-500 text-slate-900 rounded-xl font-extrabold text-xs tracking-wider transition shrink-0 shadow-lg flex items-center gap-2"
+           >
+             <Download className="w-4 h-4" />
+             Export My Data
+           </motion.button>
         </div>
       </div>
 
