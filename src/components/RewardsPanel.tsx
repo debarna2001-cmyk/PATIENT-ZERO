@@ -16,11 +16,11 @@ const BADGES = [
   { id: "b7", title: "Unbreakable", description: "Hold a flawless 14-day study streak.", condition: (c: Props) => c.shiftStreak >= 14, icon: <Award className="w-6 h-6" /> },
   { id: "b8", title: "Juggernaut", description: "Attain a 30-day streak. Your discipline is legendary.", condition: (c: Props) => c.shiftStreak >= 30, icon: <Flame className="w-6 h-6" /> },
   { id: "b9", title: "Century Club", description: "Log 100 consecutive shifts. Unstoppable force.", condition: (c: Props) => c.shiftStreak >= 100, icon: <Crown className="w-6 h-6" /> },
-  { id: "b10", title: "Rising Star", description: "Reach 500 total XP parameters.", condition: (c: Props) => c.xp >= 500, icon: <Zap className="w-6 h-6" /> },
-  { id: "b11", title: "Diagnostic Genius", description: "Attain overall Level 3 (1500 XP).", condition: (c: Props) => c.xp >= 1500, icon: <BrainCircuit className="w-6 h-6" /> },
-  { id: "b12", title: "Chief Resident", description: "Amass 3000 XP. You command the wards now.", condition: (c: Props) => c.xp >= 3000, icon: <Medal className="w-6 h-6" /> },
-  { id: "b13", title: "Master Attending", description: "Clear 6000 XP barrier. Elite clinician status.", condition: (c: Props) => c.xp >= 6000, icon: <Activity className="w-6 h-6" /> },
-  { id: "b14", title: "Legend of the Wards", description: "10,000 XP accumulated. A living operational myth.", condition: (c: Props) => c.xp >= 10000, icon: <Trophy className="w-6 h-6" /> }
+  { id: "b10", title: "Rising Star", description: "Reach 10,000 total XP parameters.", condition: (c: Props) => c.xp >= 10000, icon: <Zap className="w-6 h-6" /> },
+  { id: "b11", title: "Diagnostic Genius", description: "Attain overall Level 30 (30,000 XP).", condition: (c: Props) => c.xp >= 30000, icon: <BrainCircuit className="w-6 h-6" /> },
+  { id: "b12", title: "Chief Resident", description: "Amass 80,000 XP. You command the wards now.", condition: (c: Props) => c.xp >= 80000, icon: <Medal className="w-6 h-6" /> },
+  { id: "b13", title: "Master Attending", description: "Clear 150,000 XP barrier. Elite clinician status.", condition: (c: Props) => c.xp >= 150000, icon: <Activity className="w-6 h-6" /> },
+  { id: "b14", title: "Legend of the Wards", description: "250,000 XP accumulated. A living operational myth.", condition: (c: Props) => c.xp >= 250000, icon: <Trophy className="w-6 h-6" /> }
 ];
 
 export default function RewardsPanel(props: Props) {

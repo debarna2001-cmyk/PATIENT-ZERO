@@ -71,6 +71,7 @@ export interface UserStats {
   credits: number; // Currencies earned to redeem real-life rewards
   subjectPerformance: Record<string, { total: number; correct: number }>;
   activityLogs: Record<string, number>; // yyyy-mm-dd -> activity count for heatmap
+  triageCasesLogs?: Record<string, number>; // yyyy-mm-dd -> number of triage cases completed
   sleepLogs: Record<string, number>; // yyyy-mm-dd -> hours slept
   mcqLogs?: Record<string, number>; // yyyy-mm-dd -> MCQs solved count
   videoLogs?: Record<string, number>; // yyyy-mm-dd -> videos watched count

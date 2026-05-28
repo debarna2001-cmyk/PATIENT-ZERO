@@ -10,13 +10,13 @@ export default function JourneyMap({ stats }: Props) {
   // Expedition Milestones based on XP
   const milestones = [
     { threshold: 0, label: "Collapse Zone", icon: <AlertTriangle className="w-5 h-5" />, desc: "Initial entry into hostile territory" },
-    { threshold: 500, label: "Triage Corridor", icon: <Activity className="w-5 h-5" />, desc: "Prioritizing critical targets" },
-    { threshold: 1200, label: "Retention Vaults", icon: <Database className="w-5 h-5" />, desc: "Securing vital intel memory" },
-    { threshold: 2500, label: "High-Yield Frontier", icon: <Target className="w-5 h-5" />, desc: "Extracting pure core data" },
-    { threshold: 4000, label: "Mock Warfare District", icon: <Crosshair className="w-5 h-5" />, desc: "Engaging in simulated combat" },
-    { threshold: 6000, label: "Critical Descent", icon: <ShieldAlert className="w-5 h-5" />, desc: "Navigating extreme cognitive load" },
-    { threshold: 8500, label: "Final Extraction Route", icon: <MapIcon className="w-5 h-5" />, desc: "The sprint to the evac zone" },
-    { threshold: 10000, label: "NEET PG Extraction Point", icon: <ShieldCheck className="w-5 h-5" />, desc: "Mission parameter achieved" }
+    { threshold: 15000, label: "Triage Corridor", icon: <Activity className="w-5 h-5" />, desc: "Prioritizing critical targets" },
+    { threshold: 40000, label: "Retention Vaults", icon: <Database className="w-5 h-5" />, desc: "Securing vital intel memory" },
+    { threshold: 75000, label: "High-Yield Frontier", icon: <Target className="w-5 h-5" />, desc: "Extracting pure core data" },
+    { threshold: 115000, label: "Mock Warfare District", icon: <Crosshair className="w-5 h-5" />, desc: "Engaging in simulated combat" },
+    { threshold: 165000, label: "Critical Descent", icon: <ShieldAlert className="w-5 h-5" />, desc: "Navigating extreme cognitive load" },
+    { threshold: 220000, label: "Final Extraction Route", icon: <MapIcon className="w-5 h-5" />, desc: "The sprint to the evac zone" },
+    { threshold: 275000, label: "NEET PG Extraction Point", icon: <ShieldCheck className="w-5 h-5" />, desc: "Mission parameter achieved" }
   ];
 
   let currentLevel = 0;

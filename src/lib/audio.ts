@@ -6,7 +6,7 @@
 
 class ICUSoundEngine {
   private ctx: AudioContext | null = null;
-  private soundEnabled: boolean = false;
+  private soundEnabled: boolean = true;
   private heartbeatInterval: number | null = null;
 
   constructor() {
@@ -65,8 +65,8 @@ class ICUSoundEngine {
       filter.type = "bandpass";
       filter.frequency.setValueAtTime(1000, ctx.currentTime);
 
-      gain.gain.setValueAtTime(0.015, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04);
+      gain.gain.setValueAtTime(0.002, ctx.currentTime); // Lower volume
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.04);
 
       osc.start();
       osc.stop(ctx.currentTime + 0.05);
@@ -100,7 +100,7 @@ class ICUSoundEngine {
 
         // Slow build and decay of volume
         gain.gain.setValueAtTime(0.0, now + idx * 0.08);
-        gain.gain.linearRampToValueAtTime(0.05, now + idx * 0.08 + 0.03);
+        gain.gain.linearRampToValueAtTime(0.015, now + idx * 0.08 + 0.03); // Lower volume
         gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.08 + 0.45);
 
         osc.start(now + idx * 0.08);
@@ -131,7 +131,7 @@ class ICUSoundEngine {
       osc.frequency.linearRampToValueAtTime(980, ctx.currentTime + 0.9);
 
       gain.gain.setValueAtTime(0.0, ctx.currentTime);
-      gain.gain.linearRampToValueAtTime(0.03, ctx.currentTime + 0.2);
+      gain.gain.linearRampToValueAtTime(0.01, ctx.currentTime + 0.2); // Lower volume
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.9);
 
       osc.start();
@@ -159,7 +159,7 @@ class ICUSoundEngine {
       osc.type = "sawtooth";
       osc.frequency.setValueAtTime(110, ctx.currentTime);
 
-      gain.gain.setValueAtTime(0.04, ctx.currentTime);
+      gain.gain.setValueAtTime(0.015, ctx.currentTime); // Lower volume
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
 
       osc.start();
@@ -194,7 +194,7 @@ class ICUSoundEngine {
         osc1.type = "sine";
         osc1.frequency.setValueAtTime(55, now);
         osc1.frequency.exponentialRampToValueAtTime(20, now + 0.12);
-        gain1.gain.setValueAtTime(0.12, now);
+        gain1.gain.setValueAtTime(0.04, now); // subtly lower volume
         gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
         osc1.start(now);
         osc1.stop(now + 0.13);
@@ -208,7 +208,7 @@ class ICUSoundEngine {
         osc2.type = "sine";
         osc2.frequency.setValueAtTime(58, now + delay);
         osc2.frequency.exponentialRampToValueAtTime(22, now + delay + 0.15);
-        gain2.gain.setValueAtTime(0.12, now + delay);
+        gain2.gain.setValueAtTime(0.04, now + delay); // subtly lower volume
         gain2.gain.exponentialRampToValueAtTime(0.001, now + delay + 0.15);
         osc2.start(now + delay);
         osc2.stop(now + delay + 0.16);

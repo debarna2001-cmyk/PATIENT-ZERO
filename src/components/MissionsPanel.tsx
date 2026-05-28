@@ -8,12 +8,13 @@ interface Props {
   missions: Mission[];
   patientHealth: number;
   onUpdateProgress: (id: string, amount?: number) => void;
+  onClaimReward: (id: string, overrideCompletion?: boolean) => void;
   onAddMission: (title: string, category: 'MCQ' | 'Revision' | 'Lectures' | 'Tests' | 'Custom', target: number, unit: string, period?: 'daily' | 'weekly') => void;
   onSimulateSlip: (reason: string) => void;
   studyMode?: 'Normal' | 'Duty' | 'Rest';
 }
 
-export default function MissionsPanel({ missions, patientHealth, onUpdateProgress, onAddMission, onSimulateSlip, studyMode = 'Normal' }: Props) {
+export default function MissionsPanel({ missions, patientHealth, onUpdateProgress, onClaimReward, onAddMission, onSimulateSlip, studyMode = 'Normal' }: Props) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newTarget, setNewTarget] = useState(1);
@@ -47,19 +48,19 @@ export default function MissionsPanel({ missions, patientHealth, onUpdateProgres
             <span className={`text-xs font-bold uppercase tracking-wider ${patientHealth < 35 ? "text-red-500 dark:text-red-400" : "text-emerald-600 dark:text-emerald-400"}`}>Tactical Shift Status</span>
             <p className="text-slate-700 dark:text-slate-300 font-medium text-sm mt-1">
               {patientHealth < 35 
-                ? "WARNING: Preparation state collapsing. Complete directives immediately or initialize triage!" 
-                : "STATUS SECURE: Prep vitals holding steady. Complete daily directives to advance."}
+                ? "WARNING: Preparation state collapsing. Complete protocols immediately or initialize triage!" 
+                : "STATUS SECURE: Prep vitals holding steady. Complete daily protocols to advance."}
             </p>
           </div>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto shrink-0">
-          <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
+          <motion.button whileTap={{ scale: 0.95 }}
             onClick={() => onSimulateSlip("Dopamine Overload / Reddit Doomscroll slip")}
             className="px-4 py-2 text-xs font-bold bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl text-rose-600 hover:bg-rose-50 transition shadow-sm w-full sm:w-auto"
           >
             Report Doomscroll Slip
           </motion.button>
-          <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
+          <motion.button whileTap={{ scale: 0.95 }}
             onClick={() => onSimulateSlip("Burnout / Procrastination fatigue")}
             className="px-4 py-2 text-xs font-bold bg-white dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 rounded-xl text-amber-600 hover:bg-amber-50 transition shadow-sm w-full sm:w-auto"
           >
@@ -70,13 +71,13 @@ export default function MissionsPanel({ missions, patientHealth, onUpdateProgres
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        {/* LEFT: Core Tactical Directives */}
+        {/* LEFT: Core Tactical Protocols */}
         <div className="lg:col-span-8 flex flex-col gap-6">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-6 md:p-8 shadow-sm">
             <div className="flex justify-between items-start md:items-center flex-col md:flex-row gap-4 border-b border-slate-100 pb-5 mb-6">
               <div>
                 <h3 className="font-bold text-slate-900 dark:text-slate-100 text-xl tracking-tight flex items-center gap-2">
-                  Daily Study Directives
+                  Daily Study Protocols
                   {studyMode === 'Duty' && <span className="px-2 py-0.5 rounded text-[10px] bg-orange-100 dark:bg-orange-900/40 text-orange-700 dark:text-orange-400 font-bold uppercase tracking-widest whitespace-nowrap">Duty Active - Targets Halved</span>}
                   {studyMode === 'Rest' && <span className="px-2 py-0.5 rounded text-[10px] bg-rose-100 dark:bg-rose-900/40 text-rose-700 dark:text-rose-400 font-bold uppercase tracking-widest whitespace-nowrap">Rest Active</span>}
                 </h3>
@@ -84,18 +85,18 @@ export default function MissionsPanel({ missions, patientHealth, onUpdateProgres
               </div>
               
               {studyMode !== 'Rest' && (
-                <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
+                <motion.button whileTap={{ scale: 0.95 }}
                   onClick={() => setShowAddForm(!showAddForm)}
                   className="px-4 py-2 text-sm font-bold bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:bg-slate-800/50 rounded-xl transition shrink-0"
                 >
-                  {showAddForm ? "Close Form" : "+ Add Directive"}
+                  {showAddForm ? "Close Form" : "+ Add Protocol"}
                 </motion.button>
               )}
             </div>
 
             {showAddForm && (
               <form onSubmit={handleSubmit} className="mb-6 p-6 border border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50 dark:bg-slate-950/50 flex flex-col gap-5">
-                <h4 className="font-bold text-slate-800 dark:text-slate-200 tracking-tight">Issue New Directive</h4>
+                <h4 className="font-bold text-slate-800 dark:text-slate-200 tracking-tight">Issue New Protocol</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="flex flex-col gap-2 sm:col-span-2">
                     <label className="text-sm font-bold text-slate-600 dark:text-slate-400">Objective Label</label>
@@ -140,8 +141,8 @@ export default function MissionsPanel({ missions, patientHealth, onUpdateProgres
                     </select>
                   </div>
                 </div>
-                <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} type="submit" className="py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm tracking-wide shadow-lg shadow-slate-900/10 transition mt-2">
-                  Confirm Directive Parameter
+                <motion.button whileTap={{ scale: 0.95 }} type="submit" className="py-3.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-sm tracking-wide shadow-lg shadow-slate-900/10 transition mt-2">
+                  Confirm Protocol Parameter
                 </motion.button>
               </form>
             )}
@@ -151,16 +152,27 @@ export default function MissionsPanel({ missions, patientHealth, onUpdateProgres
                 <div className="text-center text-rose-500 py-16 bg-rose-50 dark:bg-rose-950/20 rounded-3xl border border-dashed border-rose-200 dark:border-rose-900/50">
                   <Heart className="w-12 h-12 mx-auto mb-4 animate-pulse relative z-10" />
                   <span className="font-black text-xl uppercase tracking-widest block mb-2 relative z-10">Rest Day Active</span>
-                  <span className="font-medium text-rose-600 dark:text-rose-400 relative z-10 block max-w-sm mx-auto px-4">All directives suspended. Prioritize recovery and burnout reduction.</span>
+                  <span className="font-medium text-rose-600 dark:text-rose-400 relative z-10 block max-w-sm mx-auto px-4">All protocols suspended. Prioritize recovery and burnout reduction.</span>
                 </div>
               ) : missions.length === 0 ? (
                 <div className="text-center text-slate-500 py-12 bg-slate-50 dark:bg-slate-950/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
-                  <span className="font-medium">No directives active.</span>
+                  <span className="font-medium">No protocols active.</span>
                 </div>
               ) : (
-                missions.map(m => {
+                [...missions].sort((a, b) => {
+                  const order = ["m-04-triage", "m-01-mcqs", "m-02-lectures", "m-05-review", "m-03-gt"];
+                  const aIndex = order.indexOf(a.id);
+                  const bIndex = order.indexOf(b.id);
+                  
+                  const aIdx = aIndex === -1 ? 99 : aIndex;
+                  const bIdx = bIndex === -1 ? 99 : bIndex;
+                  
+                  if (aIdx === bIdx) return a.id.localeCompare(b.id);
+                  return aIdx - bIdx;
+                }).map(m => {
                   const activeTarget = studyMode === 'Duty' ? Math.max(1, Math.ceil(m.target / 2)) : m.target;
-                  const isCompleted = m.status === "Completed" || m.current >= activeTarget;
+                  const isCompleted = m.status === "Completed";
+                  const readyToClaim = !isCompleted && m.current >= activeTarget;
                   const pct = Math.min(100, Math.floor((m.current / activeTarget) * 100));
 
                   return (
@@ -196,7 +208,7 @@ export default function MissionsPanel({ missions, patientHealth, onUpdateProgres
                           <div className="flex-1 h-3 bg-slate-100 dark:bg-slate-800/50 rounded-full overflow-hidden shadow-inner border border-slate-200 dark:border-slate-800/50">
                             <div
                               style={{ width: `${pct}%` }}
-                              className={`h-full rounded-full transition-all duration-500 ${isCompleted ? 'bg-emerald-500' : 'bg-gradient-to-r from-blue-500 to-cyan-400'}`}
+                              className={`h-full rounded-full transition-all duration-500 ${isCompleted ? 'bg-emerald-500' : readyToClaim ? 'bg-amber-400' : 'bg-gradient-to-r from-blue-500 to-cyan-400'}`}
                             />
                           </div>
                           <span className={`text-sm font-bold min-w-[60px] text-right ${isCompleted ? 'text-emerald-600' : 'text-slate-600 dark:text-slate-400'}`}>
@@ -211,25 +223,34 @@ export default function MissionsPanel({ missions, patientHealth, onUpdateProgres
                         </div>
                       </div>
 
-                      {!isCompleted ? (
-                        <div className="flex gap-2 sm:flex-col shrink-0 w-full sm:w-auto border-t sm:border-t-0 border-slate-100 pt-4 sm:pt-0">
-                          <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
-                            onClick={() => onUpdateProgress(m.id, 1)}
-                            className="px-4 py-2.5 text-sm font-bold bg-slate-100 dark:bg-slate-800/50 hover:bg-slate-200 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-xl transition flex-1 sm:flex-none text-center"
+                      {isCompleted ? (
+                        <div className="px-5 py-2.5 bg-emerald-100 text-emerald-700 rounded-xl text-sm font-bold shrink-0 text-center w-full sm:w-auto shadow-sm tracking-wide mt-4 sm:mt-0">
+                          SECURED
+                        </div>
+                      ) : readyToClaim ? (
+                        <div className="w-full sm:w-auto mt-4 sm:mt-0">
+                          <motion.button whileTap={{ scale: 0.95 }}
+                            onClick={() => onClaimReward(m.id)}
+                            className="px-6 py-3 w-full sm:w-auto text-sm font-black bg-amber-400 hover:bg-amber-300 text-amber-950 rounded-xl transition shadow-lg shadow-amber-500/20 text-center uppercase tracking-wide border border-amber-300"
                           >
-                            +1 {m.unit}
-                          </motion.button>
-                          <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
-                            onClick={() => onUpdateProgress(m.id, activeTarget - m.current)}
-                            className="px-4 py-2.5 text-sm font-bold bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-100 rounded-xl transition flex-1 sm:flex-none text-center"
-                          >
-                            Auto-Complete
+                            Claim Reward
                           </motion.button>
                         </div>
                       ) : (
-                        <div className="px-5 py-2.5 bg-emerald-100 text-emerald-700 rounded-xl text-sm font-bold shrink-0 text-center w-full sm:w-auto shadow-sm tracking-wide">
-                          SECURED
-                        </div>
+                        ["m-01-mcqs", "m-02-lectures", "m-04-triage"].includes(m.id) ? (
+                          <div className="w-full sm:w-auto mt-4 sm:mt-0 text-center text-xs font-bold text-slate-500 bg-slate-100 dark:bg-slate-800/50 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800">
+                            {m.id === "m-01-mcqs" ? "Updates via QBank logs" : m.id === "m-02-lectures" ? "Updates via Video logs" : "Updates via Triage cases"}
+                          </div>
+                        ) : (
+                          <div className="flex gap-2 sm:flex-col shrink-0 w-full sm:w-auto border-t sm:border-t-0 border-slate-100 pt-4 sm:pt-0 mt-4 sm:mt-0">
+                            <motion.button whileTap={{ scale: 0.95 }}
+                              onClick={() => onUpdateProgress(m.id, 1)}
+                              className="px-4 py-2.5 text-sm font-bold bg-slate-100 dark:bg-slate-800/50 hover:bg-slate-200 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 rounded-xl transition flex-1 sm:flex-none text-center"
+                            >
+                              Mission Accomplished
+                            </motion.button>
+                          </div>
+                        )
                       )}
                     </div>
                   );

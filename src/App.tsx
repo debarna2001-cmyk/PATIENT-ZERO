@@ -75,11 +75,11 @@ const DEFAULT_STATS: UserStats = {
 };
 
 const DEFAULT_MISSIONS: Mission[] = [
-  { id: "m-01-mcqs", title: "Complete daily Marrow MCQs", category: "MCQ", target: 50, current: 0, unit: "Questions", xpReward: 100, creditReward: 1, stabilizeValue: 25, status: "Pending", period: "daily" },
-  { id: "m-02-lectures", title: "Review Marrow video modules", category: "Lectures", target: 4, current: 0, unit: "Hours", xpReward: 200, creditReward: 1, stabilizeValue: 35, status: "Pending", period: "daily" },
-  { id: "m-03-gt", title: "Biweekly Full-Length GT", category: "Tests", target: 1, current: 0, unit: "GT", xpReward: 500, creditReward: 5, stabilizeValue: 100, status: "Pending", period: "weekly" },
   { id: "m-04-triage", title: "Daily Triage Completion", category: "Triage", target: 1, current: 0, unit: "Session", xpReward: 300, creditReward: 3, stabilizeValue: 50, status: "Pending", period: "daily" },
-  { id: "m-05-review", title: "1 Hour Review Session", category: "Revision", target: 1, current: 0, unit: "Hour", xpReward: 80, creditReward: 0.5, stabilizeValue: 15, status: "Pending", period: "daily" }
+  { id: "m-01-mcqs", title: "Complete daily Marrow MCQs", category: "MCQ", target: 50, current: 0, unit: "Questions", xpReward: 100, creditReward: 1, stabilizeValue: 25, status: "Pending", period: "daily" },
+  { id: "m-02-lectures", title: "Watch Marrow video modules", category: "Lectures", target: 4, current: 0, unit: "Hours", xpReward: 200, creditReward: 1, stabilizeValue: 35, status: "Pending", period: "daily" },
+  { id: "m-05-review", title: "1 Hour Review Session", category: "Revision", target: 1, current: 0, unit: "Hour", xpReward: 80, creditReward: 0.5, stabilizeValue: 15, status: "Pending", period: "daily" },
+  { id: "m-03-gt", title: "Defeat the Weekly Grand Test (GT)", category: "Tests", target: 1, current: 0, unit: "GT", xpReward: 500, creditReward: 5, stabilizeValue: 100, status: "Pending", period: "weekly" }
 ];
 
 export default function App() {
@@ -95,6 +95,7 @@ export default function App() {
   }, []);
 
   const [activeTab, setActiveTab] = useState<"dashboard" | "missions" | "triage" | "progress" | "avatar" | "achievements" | "rewards" | "settings" | "vault">("dashboard");
+  const [vaultView, setVaultView] = useState<"pearls" | "history">("pearls");
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem("patient_zero_v2_theme");
     return saved ? saved === "dark" : true;
@@ -126,14 +127,21 @@ export default function App() {
 
     const checkTime = () => {
       const now = new Date();
-      if (now.getHours() === 8 && now.getMinutes() === 0 && now.getSeconds() < 10) {
+      const todayString = now.toISOString().split("T")[0];
+      const lastTrigger = localStorage.getItem("patient_zero_morning_notif");
+      
+      if (now.getHours() >= 8 && lastTrigger !== todayString) {
+        localStorage.setItem("patient_zero_morning_notif", todayString);
         triggerNotification("0800 HRS: Morning Shift", {
           body: "Your 5-case Triage Session is ready. Engage to stabilize the patient.",
           tag: "morning-shift-reminder"
         });
       }
     };
+    // Check every minute instead of 10s is sufficient, but 10s is fine
     const timerId = setInterval(checkTime, 10000);
+    // Call it once immediately as well in case they open the app after 8am
+    checkTime();
     return () => clearInterval(timerId);
   }, []);
 
@@ -240,8 +248,13 @@ export default function App() {
             const loaded = snapshot.docs.map(d => d.data() as Mission);
             const currentIds = loaded.map(m => m.id);
             
-            // Check if any default missions are missing
+            // Check if any default missions are missing or have outdated titles
             const missingMissions = DEFAULT_MISSIONS.filter(dm => !currentIds.includes(dm.id));
+            const outdatedMissions = loaded.filter(m => {
+              const dm = DEFAULT_MISSIONS.find(d => d.id === m.id);
+              if (dm && dm.title !== m.title) return true;
+              return false;
+            });
             
             // Deprecated missions and duplicates
             const deprecatedIds = ["m-03-revision", "m-04-mock", "m-04-gt-biweekly"];
@@ -256,11 +269,32 @@ export default function App() {
 
             const hasDeprecated = loaded.some(isDeprecated);
             
-            if (missingMissions.length > 0 || hasDeprecated) {
-               const updated = loaded.filter(m => !isDeprecated(m));
+            if (missingMissions.length > 0 || hasDeprecated || outdatedMissions.length > 0) {
+               const updated = loaded.filter(m => !isDeprecated(m)).map(m => {
+                 const dm = DEFAULT_MISSIONS.find(d => d.id === m.id);
+                 if (dm && dm.title !== m.title) {
+                   return { ...m, title: dm.title };
+                 }
+                 return m;
+               });
+               
                missingMissions.forEach(m => {
                  updated.push(m);
                  setDoc(doc(db, "users", authUser.uid, "missions", m.id), m);
+               });
+               
+               outdatedMissions.forEach(m => {
+                  const dm = DEFAULT_MISSIONS.find(d => d.id === m.id);
+                  if (dm) setDoc(doc(db, "users", authUser.uid, "missions", m.id), { ...m, title: dm.title }, { merge: true });
+               });
+               
+               updated.sort((a, b) => {
+                 const aIndex = DEFAULT_MISSIONS.findIndex(dm => dm.id === a.id);
+                 const bIndex = DEFAULT_MISSIONS.findIndex(dm => dm.id === b.id);
+                 const aIdx = aIndex === -1 ? 99 : aIndex;
+                 const bIdx = bIndex === -1 ? 99 : bIndex;
+                 if (aIdx === bIdx) return a.id.localeCompare(b.id);
+                 return aIdx - bIdx;
                });
                setMissions(updated);
                
@@ -270,7 +304,15 @@ export default function App() {
                  });
                }
             } else {
-               setMissions(loaded);
+               const sortedLoaded = [...loaded].sort((a, b) => {
+                 const aIndex = DEFAULT_MISSIONS.findIndex(dm => dm.id === a.id);
+                 const bIndex = DEFAULT_MISSIONS.findIndex(dm => dm.id === b.id);
+                 const aIdx = aIndex === -1 ? 99 : aIndex;
+                 const bIdx = bIndex === -1 ? 99 : bIndex;
+                 if (aIdx === bIdx) return a.id.localeCompare(b.id);
+                 return aIdx - bIdx;
+               });
+               setMissions(sortedLoaded);
             }
         }
         else {
@@ -321,11 +363,11 @@ export default function App() {
 
   const modifyStats = (modifier: (prev: UserStats) => UserStats) => {
      setStats(prev => {
-         const mergedPrev = prev || DEFAULT_STATS;
+         const mergedPrev = { ...DEFAULT_STATS, ...(prev || {}) };
          const next = modifier(mergedPrev);
          const currentUser = auth.currentUser;
          if (currentUser) {
-            setDoc(doc(db, "users", currentUser.uid), next).catch(e => handleFirestoreError(e, OperationType.UPDATE, "users"));
+            setDoc(doc(db, "users", currentUser.uid), next, { merge: true }).catch(e => handleFirestoreError(e, OperationType.UPDATE, "users"));
          } else {
             localStorage.setItem("patient_zero_v2_stats", JSON.stringify(next));
          }
@@ -333,15 +375,25 @@ export default function App() {
      });
   };
 
-  const logActivity = (prev: UserStats, mcqsToAdd = 0) => {
+  const logActivity = (prev: UserStats, options: { mcqs?: number, videos?: number, cases?: number } = {}) => {
     const today = new Date().toISOString().split("T")[0];
     const newLogs = { ...(prev.activityLogs || {}) };
     newLogs[today] = (newLogs[today] || 0) + 1;
     let nextPrev = { ...prev, activityLogs: newLogs };
-    if (mcqsToAdd > 0) {
+    if (options.mcqs) {
       const copyM = { ...(nextPrev.mcqLogs || {}) };
-      copyM[today] = (copyM[today] || 0) + mcqsToAdd;
+      copyM[today] = (copyM[today] || 0) + options.mcqs;
       nextPrev.mcqLogs = copyM;
+    }
+    if (options.videos) {
+      const copyV = { ...(nextPrev.videoLogs || {}) };
+      copyV[today] = (copyV[today] || 0) + options.videos;
+      nextPrev.videoLogs = copyV;
+    }
+    if (options.cases) {
+      const copyC = { ...(nextPrev.triageCasesLogs || {}) };
+      copyC[today] = (copyC[today] || 0) + options.cases;
+      nextPrev.triageCasesLogs = copyC;
     }
     return nextPrev;
   };
@@ -447,7 +499,7 @@ export default function App() {
       const rawHealth = prev.patientHealth + hpReward;
       const rawBurnout = prev.burnoutIndex - (type === 'QuickBreak' ? 30 : 10);
       
-      let nextBase = { ...prev, patientHealth: Math.min(100, rawHealth), burnoutIndex: Math.max(1, rawBurnout), xp: prev.xp + xpReward, credits: prev.credits + crdtReward };
+      let nextBase = { ...prev, patientHealth: Math.min(100, rawHealth), burnoutIndex: Math.max(1, rawBurnout), xp: (prev.xp || 0) + xpReward, credits: (prev.credits || 0) + crdtReward };
       const dateStr = new Date().toISOString().split("T")[0];
       
       if (type === 'QuickMCQ') {
@@ -485,22 +537,14 @@ export default function App() {
     spawnParticles(xs);
 
     if (type === 'QuickMCQ') {
-      const copyMissions = [...missions];
-      const targetM = copyMissions.find(m => m.category === "MCQ");
+      const targetM = missions.find(m => m.category === "MCQ");
       if (targetM && targetM.status === "Pending") {
-        const adjustedTarget = stats.studyMode === 'Duty' ? Math.max(1, Math.ceil(targetM.target / 2)) : stats.studyMode === 'Rest' ? 0 : targetM.target;
-        targetM.current = Math.min(adjustedTarget, targetM.current + 10);
-        if (targetM.current >= adjustedTarget) targetM.status = "Completed";
-        updateMissions(copyMissions);
+        handleUpdateMissionProgress(targetM.id, 10);
       }
     } else if (type === 'FullStudy') {
-      const copyMissions = [...missions];
-      const targetM = copyMissions.find(m => m.category === "Lectures");
+      const targetM = missions.find(m => m.category === "Lectures");
       if (targetM && targetM.status === "Pending") {
-        const adjustedTarget = stats.studyMode === 'Duty' ? Math.max(1, Math.ceil(targetM.target / 2)) : stats.studyMode === 'Rest' ? 0 : targetM.target;
-        targetM.current = Math.min(adjustedTarget, targetM.current + 1);
-        if (targetM.current >= adjustedTarget) targetM.status = "Completed";
-        updateMissions(copyMissions);
+        handleUpdateMissionProgress(targetM.id, 1);
       }
     }
   };
@@ -573,32 +617,52 @@ export default function App() {
   };
 
   const handleUpdateMissionProgress = (id: string, amount?: number) => {
-    const copy = [...missions];
+    const copy = missions.map(m => ({ ...m }));
     const item = copy.find(m => m.id === id);
     if (!item || item.status === "Completed") return;
     const adjustedTarget = stats.studyMode === 'Duty' ? Math.max(1, Math.ceil(item.target / 2)) : 
                            stats.studyMode === 'Rest' ? 0 : item.target;
     
-    const delta = amount || 1;
+    const delta = amount !== undefined ? amount : 1;
     item.current = Math.min(adjustedTarget, item.current + delta);
-    if (item.current >= adjustedTarget) {
-      item.status = "Completed";
-      modifyStats((prev) => {
-        const nextXp = prev.xp + item.xpReward;
-        const next = logActivity({ ...prev, xp: nextXp, credits: prev.credits + (item.creditReward || 0), patientHealth: Math.min(100, prev.patientHealth + item.stabilizeValue), burnoutIndex: Math.max(4, prev.burnoutIndex - 8) });
-        
-        return next;
-      });
-      sound.stabilizationChime();
-      spawnParticles(`+${item.xpReward} XP & +${item.creditReward} CRDT`);
-    } else {
-      sound.click();
-      spawnParticles(`+${delta} ${item.unit}`);
+    sound.click();
+    spawnParticles(`+${delta} ${item.unit}`);
+    updateMissions(copy);
+  };
+
+  const handleClaimMissionReward = (id: string, overrideCompletion: boolean = false) => {
+    const copy = missions.map(m => ({ ...m }));
+    const item = copy.find(m => m.id === id);
+    if (!item || item.status === "Completed") return;
+    const adjustedTarget = stats.studyMode === 'Duty' ? Math.max(1, Math.ceil(item.target / 2)) : 
+                           stats.studyMode === 'Rest' ? 0 : item.target;
+    
+    if (!overrideCompletion && item.current < adjustedTarget) {
+      return; 
     }
+
+    item.current = adjustedTarget;
+    item.status = "Completed";
+    modifyStats((prev) => {
+      const nextXp = (prev.xp || 0) + item.xpReward;
+      const next = logActivity({ ...prev, xp: nextXp, credits: (prev.credits || 0) + (item.creditReward || 0), patientHealth: Math.min(100, prev.patientHealth + item.stabilizeValue), burnoutIndex: Math.max(4, prev.burnoutIndex - 8) });
+      
+      return next;
+    });
+    sound.stabilizationChime();
+    spawnParticles(`+${item.xpReward} XP & +${item.creditReward} CRDT`);
     updateMissions(copy);
   };
 
   const startTriageSession = async () => {
+    const today = new Date().toISOString().split("T")[0];
+    const casesPlayedToday = stats.triageCasesLogs?.[today] || 0;
+    const remainingToday = Math.max(0, 5 - casesPlayedToday);
+    if (remainingToday === 0) {
+       alert("Daily Limit Reached: You have reached the maximum limit of 5 clinical cases for today. Return tomorrow for your next operative shift.");
+       setActiveTab("dashboard");
+       return;
+    }
     sound.charge();
     setIsGenerating(true);
     setErrorMessage(null);
@@ -615,17 +679,18 @@ export default function App() {
       if (!response.ok) throw new Error("Network corrupted. Admitting fallback clinical case.");
       const freshCases: ClinicalCase[] = await response.json();
       if (Array.isArray(freshCases) && freshCases.length > 0) {
-        setTriageQueue(freshCases.slice(1));
-        setCurrentCase(freshCases[0]);
+        const allowedCases = freshCases.slice(0, remainingToday);
+        setTriageQueue(allowedCases.slice(1));
+        setCurrentCase(allowedCases[0]);
       } else {
         throw new Error("Invalid format");
       }
     } catch (err) {
       const filtered = fallbackCases.filter((c) => c.specialty.toLowerCase().includes(selectedSpecialty.toLowerCase()));
-      const options = filtered.length >= 5 ? filtered : fallbackCases;
-      // Shuffle options to pick 5
+      const options = filtered.length >= remainingToday ? filtered : fallbackCases;
+      // Shuffle options to pick required amount
       const shuffled = [...options].sort(() => 0.5 - Math.random());
-      const selectedCases = shuffled.slice(0, 5).map(c => ({ ...c, id: `offline-${Date.now()}-${Math.random()}` }));
+      const selectedCases = shuffled.slice(0, remainingToday).map(c => ({ ...c, id: `offline-${Date.now()}-${Math.random()}` }));
       setTriageQueue(selectedCases.slice(1));
       setCurrentCase(selectedCases[0]);
       setErrorMessage("OFFLINE BACKUP DEPLOYED: Simulation is running on internal local firmware.");
@@ -660,7 +725,7 @@ export default function App() {
         setSessionHistory(prev => [...prev, { case: currentCase, success: false }]);
     }
     modifyStats((prev) => {
-      const next = logActivity({ ...prev, patientsFlatlined: prev.patientsFlatlined + 1, patientHealth: Math.max(0, prev.patientHealth - 25), shiftStreak: 0 }, 1);
+      const next = logActivity({ ...prev, patientsFlatlined: prev.patientsFlatlined + 1, patientHealth: Math.max(0, prev.patientHealth - 25), shiftStreak: 0 }, { cases: 1 });
       
       return next;
     });
@@ -690,19 +755,16 @@ export default function App() {
       const earnedXP = 150 + streakBonusXP;
 
       modifyStats((prev) => {
-        const next = logActivity({ ...prev, xp: prev.xp + earnedXP, credits: prev.credits + earnedCredits, patientHealth: Math.min(100, prev.patientHealth + 30), patientsSaved: prev.patientsSaved + 1, shiftStreak: prev.shiftStreak + 1, unlockedPearlsCount: prev.unlockedPearlsCount + 1, subjectPerformance: performance }, 1);
+        const next = logActivity({ ...prev, xp: (prev.xp || 0) + earnedXP, credits: (prev.credits || 0) + earnedCredits, patientHealth: Math.min(100, prev.patientHealth + 30), patientsSaved: prev.patientsSaved + 1, shiftStreak: prev.shiftStreak + 1, unlockedPearlsCount: prev.unlockedPearlsCount + 1, subjectPerformance: performance }, { cases: 1 });
         
         return next;
       });
       const newLog: EmergencyLog = { id: `log-${Date.now()}`, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), patientName: currentCase.patientName, specialty: currentCase.specialty, result: "STABILIZED", vignette: currentCase.clinicalVignette, userAnswer: selectedAnswer, correctAnswer: currentCase.correctAnswer, pearl: currentCase.highYieldPearl };
       updateLogs([newLog, ...logs]);
       setSessionHistory(prev => [...prev, { case: currentCase, success: true }]);
-      const copyM = [...missions];
-      const mcqM = copyM.find(m => m.category === "MCQ");
+      const mcqM = missions.find(m => m.category === "MCQ");
       if (mcqM && mcqM.status === "Pending") {
-        mcqM.current = Math.min(mcqM.target, mcqM.current + 1);
-        if (mcqM.current >= mcqM.target) mcqM.status = "Completed";
-        updateMissions(copyM);
+        handleUpdateMissionProgress(mcqM.id, 1);
       }
       spawnParticles("STABILIZED (+30%)");
       spawnParticles(`+${earnedXP} XP / +${earnedCredits} CRDT`);
@@ -735,14 +797,14 @@ export default function App() {
       dismissPatient();
       setIsFetchingSuggestions(true);
       
-      const copyM = [...missions];
-      const triageM = copyM.find(m => m.id === "m-04-triage");
-      if (triageM && triageM.status === "Pending") {
-        const adjustedTarget = stats.studyMode === 'Duty' ? Math.max(1, Math.ceil(triageM.target / 2)) : stats.studyMode === 'Rest' ? 0 : triageM.target;
-        triageM.current = Math.min(adjustedTarget, triageM.current + 1);
-        if (triageM.current >= adjustedTarget) triageM.status = "Completed";
-        updateMissions(copyM);
-        spawnParticles("DAILY TRIAGE COMPLETED");
+      const today = new Date().toISOString().split("T")[0];
+      const casesPlayedToday = stats.triageCasesLogs?.[today] || 0;
+      
+      if (casesPlayedToday >= 5) {
+        const triageM = missions.find(m => m.id === "m-04-triage");
+        if (triageM && triageM.status === "Pending") {
+          handleUpdateMissionProgress(triageM.id, 1);
+        }
       }
 
       try {
@@ -795,7 +857,7 @@ export default function App() {
   const handleHardReset = () => {
     localStorage.clear();
     setStats(DEFAULT_STATS);
-    setMissions(DEFAULT_MISSIONS);
+    setMissions(DEFAULT_MISSIONS.map(m => ({ ...m })));
     setLogs([]);
     setMoodLogs([]);
     setCurrentCase(null);
@@ -806,7 +868,14 @@ export default function App() {
       setDoc(doc(db, "users", authUser.uid, "stats", "current"), DEFAULT_STATS).catch(console.error);
       setDoc(doc(db, "users", authUser.uid), DEFAULT_STATS).catch(console.error);
       
-      DEFAULT_MISSIONS.forEach(m => setDoc(doc(db, "users", authUser.uid, "missions", m.id), m));
+      // Delete any missions that aren't in DEFAULT_MISSIONS
+      missions.forEach(m => {
+        if (!DEFAULT_MISSIONS.find(dm => dm.id === m.id)) {
+          deleteDoc(doc(db, "users", authUser.uid, "missions", m.id)).catch(console.error);
+        }
+      });
+      
+      DEFAULT_MISSIONS.forEach(m => setDoc(doc(db, "users", authUser.uid, "missions", m.id), { ...m }));
       
       logs.forEach(l => deleteDoc(doc(db, "users", authUser.uid, "logs", l.id)).catch(console.error));
       moodLogs.forEach(m => deleteDoc(doc(db, "users", authUser.uid, "moods", m.id)).catch(console.error));
@@ -827,7 +896,7 @@ export default function App() {
 
   const NAV_TABS = [
     { id: "dashboard", label: "Dashboard", icon: <BarChart3 className="w-5 h-5" /> },
-    { id: "missions", label: "Missions", icon: <Calendar className="w-5 h-5" /> },
+    { id: "missions", label: "Protocols", icon: <Calendar className="w-5 h-5" /> },
     { id: "triage", label: "Triage", icon: <Activity className="w-5 h-5" /> },
     { id: "progress", label: "Analytics", icon: <FileText className="w-5 h-5" /> },
     { id: "avatar", label: "My Journey", icon: <Compass className="w-5 h-5" /> },
@@ -854,7 +923,7 @@ export default function App() {
             </div>
             <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight text-center mb-2">Patient Zero</h1>
             <p className="text-sm font-medium text-slate-500 text-center mb-8">Access the secure clinical simulation and sync your progress to the cloud.</p>
-            <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} onClick={signInWithGoogle} className="w-full py-3 px-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-3 active:scale-[0.98]">
+            <motion.button whileTap={{ scale: 0.95 }} onClick={signInWithGoogle} className="w-full py-3 px-4 bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-bold rounded-xl shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-3 active:scale-[0.98]">
                <LogIn className="w-5 h-5" />
                Sign in with Google
             </motion.button>
@@ -906,11 +975,11 @@ export default function App() {
                </div>
             </div>
             <div className="flex items-center gap-2">
-               <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-cyan-400 border border-slate-200 dark:border-slate-700">
+               <motion.button whileTap={{ scale: 0.95 }} onClick={() => setIsDarkMode(!isDarkMode)} className="p-2 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-cyan-400 border border-slate-200 dark:border-slate-700">
                   <Activity className="w-4 h-4" />
                </motion.button>
                <div className="relative">
-                 <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} 
+                 <motion.button whileTap={{ scale: 0.95 }} 
                    onClick={() => setModeMenuOpen(m => !m)}
                    className="px-3 py-1.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-cyan-400 border border-slate-200 dark:border-slate-700 text-xs font-bold uppercase tracking-wider flex items-center justify-between min-w-[140px] gap-2 transition-colors hover:bg-slate-200 dark:hover:bg-slate-700"
                  >
@@ -936,7 +1005,7 @@ export default function App() {
                            {id: 'Duty', label: 'Intensive On-Call', icon: <ShieldAlert className="w-4 h-4 text-orange-500" />},
                            {id: 'Rest', label: 'Recovery Shift', icon: <Heart className="w-4 h-4 text-rose-500" />}
                          ].map(mode => (
-                           <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} key={mode.id}
+                           <motion.button whileTap={{ scale: 0.95 }} key={mode.id}
                              onClick={() => {
                                const nextMode = mode.id as 'Normal' | 'Duty' | 'Rest';
                                modifyStats(prev => {
@@ -1102,9 +1171,9 @@ export default function App() {
 
                   {/* Actions Deck */}
                   <div className="flex flex-col gap-4">
-                    <h4 className="text-base font-bold text-slate-800 dark:text-slate-200 tracking-tight">Execute Clinical Protocols</h4>
+                    <h4 className="text-base font-bold text-slate-800 dark:text-slate-200 tracking-tight">Immediate Interventions</h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
-                      <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
+                      <motion.button whileTap={{ scale: 0.95 }}
                         onClick={() => { setActiveTab("triage"); startTriageSession(); }}
                         disabled={isGenerating}
                         className="p-6 border border-white/50 backdrop-blur-md bg-white dark:bg-slate-900/40 hover:bg-white dark:bg-slate-900/60 hover:border-rose-300 hover:shadow-lg text-left rounded-3xl transition-all group disabled:opacity-50 disabled:cursor-not-allowed"
@@ -1116,7 +1185,7 @@ export default function App() {
                         </p>
                       </motion.button>
 
-                      <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
+                      <motion.button whileTap={{ scale: 0.95 }}
                         onClick={() => { setManualLogType("QuickMCQ"); setManualLogModalOpen(true); setSelectedSubjects([]); }}
                         className="p-6 border border-white/50 backdrop-blur-md bg-white dark:bg-slate-900/40 hover:bg-white dark:bg-slate-900/60 hover:border-orange-300 hover:shadow-lg text-left rounded-3xl transition-all group"
                       >
@@ -1127,7 +1196,7 @@ export default function App() {
                         </p>
                       </motion.button>
 
-                      <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
+                      <motion.button whileTap={{ scale: 0.95 }}
                         onClick={() => { setManualLogType("FullStudy"); setManualLogModalOpen(true); setSelectedSubjects([]); }}
                         className="p-6 border border-white/50 backdrop-blur-md bg-white dark:bg-slate-900/40 hover:bg-white dark:bg-slate-900/60 hover:border-purple-300 hover:shadow-lg text-left rounded-3xl transition-all group"
                       >
@@ -1138,7 +1207,7 @@ export default function App() {
                         </p>
                       </motion.button>
 
-                      <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
+                      <motion.button whileTap={{ scale: 0.95 }}
                         onClick={() => { setActiveTab("vault"); }}
                         className="p-6 border border-white/50 backdrop-blur-md bg-white dark:bg-slate-900/40 hover:bg-white dark:bg-slate-900/60 hover:border-blue-300 hover:shadow-lg text-left rounded-3xl transition-all group"
                       >
@@ -1149,7 +1218,7 @@ export default function App() {
                         </p>
                       </motion.button>
 
-                      <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
+                      <motion.button whileTap={{ scale: 0.95 }}
                         onClick={() => setShowSleepModal(true)}
                         className="p-6 border border-white/50 backdrop-blur-md bg-white dark:bg-slate-900/40 hover:bg-white dark:bg-slate-900/60 hover:border-emerald-300 hover:shadow-lg text-left rounded-3xl transition-all group"
                       >
@@ -1179,7 +1248,7 @@ export default function App() {
                         <label className="text-sm font-bold text-slate-700 dark:text-slate-300 mb-4 block">Current Resilience (1: Exhausted, 5: Radiant)</label>
                         <div className="flex items-center gap-4">
                           {[1, 2, 3, 4, 5].map((val) => (
-                            <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
+                            <motion.button whileTap={{ scale: 0.95 }}
                               key={val}
                               type="button"
                               onClick={() => setMoodRating(val)}
@@ -1206,7 +1275,7 @@ export default function App() {
                         />
                       </div>
 
-                      <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
+                      <motion.button whileTap={{ scale: 0.95 }}
                         type="submit"
                         className="py-4 w-full bg-purple-600 hover:bg-purple-500 text-white rounded-2xl font-bold text-sm tracking-wide shadow-lg shadow-purple-600/20 transition-all"
                       >
@@ -1243,11 +1312,11 @@ export default function App() {
                     <span className="text-base font-bold text-slate-400 mt-2">Days Remaining</span>
                   </div>
 
-                  {/* Quick Directive list */}
+                  {/* Quick Protocol list */}
                   <div className="border border-white/60 bg-white dark:bg-slate-900/50 backdrop-blur-xl rounded-3xl p-8 flex flex-col flex-1 shadow-xl h-full">
                     <div className="flex justify-between items-center mb-6">
-                      <h4 className="font-bold text-slate-900 dark:text-slate-100 text-lg">Active Directives</h4>
-                      <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} 
+                      <h4 className="font-bold text-slate-900 dark:text-slate-100 text-lg">Active Protocols</h4>
+                      <motion.button whileTap={{ scale: 0.95 }} 
                         onClick={() => handleTabChange("missions")}
                         className="text-blue-600 text-sm hover:text-blue-700 font-bold bg-blue-50 px-3 py-1.5 rounded-lg transition"
                       >
@@ -1296,6 +1365,7 @@ export default function App() {
                 missions={missions}
                 patientHealth={stats.patientHealth}
                 onUpdateProgress={handleUpdateMissionProgress}
+                onClaimReward={handleClaimMissionReward}
                 onAddMission={handleAddCustomMission}
                 onSimulateSlip={handleSimulateSlip}
                 studyMode={stats.studyMode}
@@ -1331,7 +1401,7 @@ export default function App() {
                   </select>
                   {/* Keep small admit button just in case, or hide it if we add large button? Let's hide it if !currentCase so they only see the big one. */}
                   {currentCase && (
-                    <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
+                    <motion.button whileTap={{ scale: 0.95 }}
                       disabled={true}
                       className="flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600/50 text-white text-sm font-bold rounded-xl shadow-lg shadow-blue-500/20 transition-all shrink-0 cursor-not-allowed cursor-default"
                     >
@@ -1349,7 +1419,7 @@ export default function App() {
                       </div>
                       <h4 className="font-black text-slate-900 dark:text-slate-100 text-2xl uppercase tracking-tight mb-2">Initiate Shift</h4>
                       <p className="text-sm font-medium text-slate-500 mb-8 max-w-md">Begin a rigorous 5-case clinical triage session. Answer emergencies back-to-back to stabilize the patient health meter.</p>
-                      <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
+                      <motion.button whileTap={{ scale: 0.95 }}
                         onClick={startTriageSession}
                         disabled={isGenerating}
                         className="flex items-center justify-center gap-3 px-10 py-5 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-100 dark:bg-white dark:hover:bg-slate-200 dark:disabled:bg-slate-800/50 disabled:text-slate-400 dark:text-slate-900 text-white text-sm font-bold rounded-2xl shadow-xl shadow-slate-900/10 transition-all shrink-0 uppercase tracking-widest"
@@ -1385,7 +1455,7 @@ export default function App() {
                                ))}
                              </ul>
                              <div className="mt-8 flex justify-center">
-                                <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
+                                <motion.button whileTap={{ scale: 0.95 }}
                                    onClick={() => { setShiftSuggestions(null); setSessionHistory([]); }}
                                    className="px-8 py-3 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-200 text-white dark:text-slate-900 font-bold rounded-xl shadow transition-all uppercase tracking-wide text-sm"
                                 >
@@ -1444,7 +1514,7 @@ export default function App() {
                       }
 
                       return (
-                        <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
+                        <motion.button whileTap={{ scale: 0.95 }}
                           key={key}
                           onClick={() => !revealed && setSelectedAnswer(key as any)}
                           disabled={revealed}
@@ -1459,7 +1529,7 @@ export default function App() {
 
                   {!revealed ? (
                     <div className="mt-10 flex justify-end">
-                      <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
+                      <motion.button whileTap={{ scale: 0.95 }}
                         onClick={submitRemedy}
                         disabled={!selectedAnswer}
                         className="px-10 py-4 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-100 dark:bg-slate-800/50 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-bold rounded-2xl shadow-xl shadow-slate-900/10 transition-all text-sm tracking-wide uppercase"
@@ -1496,14 +1566,14 @@ export default function App() {
                       </div>
                       <div className="mt-8 flex justify-end gap-3">
                         {triageQueue.length > 0 ? (
-                          <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
+                          <motion.button whileTap={{ scale: 0.95 }}
                             onClick={advanceToNextPatient}
                             className="px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl shadow-lg shadow-blue-600/20 transition-all text-sm tracking-wide uppercase flex items-center justify-center gap-2"
                           >
                             Next Emergency <ChevronRight className="w-5 h-5" />
                           </motion.button>
                         ) : (
-                          <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
+                          <motion.button whileTap={{ scale: 0.95 }}
                             onClick={endShift}
                             className="px-8 py-4 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-100 dark:bg-white dark:hover:bg-slate-200 dark:text-slate-900 text-white font-bold rounded-2xl shadow-lg shadow-blue-600/20 transition-all text-sm tracking-wide uppercase"
                           >
@@ -1542,7 +1612,7 @@ export default function App() {
               <div className="mt-10 pt-10 border-t border-slate-200 dark:border-slate-800">
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="font-bold text-slate-900 dark:text-slate-100 text-xl tracking-tight">Clinical Operation History</h3>
-                  <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} onClick={handleClearLogs} className="text-xs font-bold text-rose-600 hover:text-rose-700 transition px-4 py-2 rounded-xl bg-rose-50 border border-rose-200">Purge Logs</motion.button>
+                  <motion.button whileTap={{ scale: 0.95 }} onClick={handleClearLogs} className="text-xs font-bold text-rose-600 hover:text-rose-700 transition px-4 py-2 rounded-xl bg-rose-50 border border-rose-200">Purge Logs</motion.button>
                 </div>
                 <ShiftLog logs={logs} />
               </div>
@@ -1558,36 +1628,67 @@ export default function App() {
               transition={{ duration: 0.2 }}
             >
               <div className="flex flex-col gap-6">
-                 <div className="flex items-center gap-4 py-4 border-b border-white/10 dark:border-slate-800">
-                   <div className="w-12 h-12 bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-2xl flex items-center justify-center">
-                     <BookOpen className="w-6 h-6" />
+                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-4 border-b border-white/10 dark:border-slate-800">
+                   <div className="flex items-center gap-4">
+                     <div className="w-12 h-12 bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-2xl flex items-center justify-center">
+                       <BookOpen className="w-6 h-6" />
+                     </div>
+                     <div>
+                       <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight">Clinical Records</h2>
+                       <p className="text-slate-500 text-sm">Review clinical pearls and operation history.</p>
+                     </div>
                    </div>
-                   <div>
-                     <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight">High-Yield Vault</h2>
-                     <p className="text-slate-500 text-sm">Review clinical pearls extracted from past triage cases.</p>
+                   <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/50 p-1 rounded-xl">
+                     <button onClick={() => setVaultView("pearls")} className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${vaultView === 'pearls' ? 'bg-white dark:bg-slate-700 shadow-sm text-emerald-600 dark:text-emerald-400' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>High-Yield Pearls</button>
+                     <button onClick={() => setVaultView("history")} className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${vaultView === 'history' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Operation History</button>
                    </div>
                  </div>
 
                  {logs.length === 0 ? (
                     <div className="py-24 flex flex-col items-center justify-center text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-3xl bg-slate-50 dark:bg-slate-900/30">
                        <FileText className="w-12 h-12 text-slate-400 dark:text-slate-600 mb-4" />
-                       <p className="text-slate-500 dark:text-slate-400 font-medium">No clinical pearls acquired yet.<br/>Complete Triage cases to extract knowledge.</p>
+                       <p className="text-slate-500 dark:text-slate-400 font-medium">No clinical records acquired yet.<br/>Complete Triage cases to populate this vault.</p>
                     </div>
                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {logs.filter(l => l.result === "STABILIZED").map((log, idx) => (
-                        <div key={idx} className="bg-white dark:bg-slate-900/50 backdrop-blur-md border border-slate-200 dark:border-white/10 p-6 rounded-2xl hover:border-emerald-300 dark:hover:border-emerald-500/30 hover:-translate-y-1 hover:shadow-lg transition-all shadow border-b-4 border-b-slate-200 dark:border-b-white/10 flex flex-col h-full group">
-                           <div className="flex justify-between items-start mb-4">
-                              <span className="text-xs font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest bg-emerald-100 dark:bg-emerald-500/10 px-3 py-1 rounded-full">{log.specialty}</span>
-                              <span className="text-xs text-slate-400 dark:text-slate-500 font-bold uppercase">{log.timestamp}</span>
-                           </div>
-                           <p className="font-bold text-slate-800 dark:text-slate-100 mb-4 text-sm leading-relaxed">{log.pearl}</p>
-                           <div className="p-4 bg-slate-50 dark:bg-slate-950/50 rounded-xl border border-slate-100 dark:border-white/5 space-y-2 mt-auto">
-                              <p className="text-xs text-slate-500 dark:text-slate-400"><span className="font-bold text-slate-700 dark:text-slate-300">Vignette Context:</span> <span className="line-clamp-2 mt-1">{log.vignette}</span></p>
-                              <p className="text-xs text-slate-600 dark:text-slate-300 font-bold mt-2 pt-2 border-t border-slate-200 dark:border-white/5">Diagnosed: <span className="text-emerald-600 dark:text-emerald-400">{log.correctAnswer}</span></p>
-                           </div>
+                    <div className="flex flex-col gap-6">
+                      {vaultView === "pearls" ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                          {logs.filter(l => l.result === "STABILIZED").map((log, idx) => (
+                            <div key={idx} className="bg-white dark:bg-slate-900/50 backdrop-blur-md border border-slate-200 dark:border-white/10 p-6 rounded-2xl hover:border-emerald-300 dark:hover:border-emerald-500/30 hover:-translate-y-1 hover:shadow-lg transition-all shadow border-b-4 border-b-slate-200 dark:border-b-white/10 flex flex-col h-full group">
+                               <div className="flex justify-between items-start mb-4">
+                                  <span className="text-xs font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest bg-emerald-100 dark:bg-emerald-500/10 px-3 py-1 rounded-full">{log.specialty}</span>
+                                  <span className="text-xs text-slate-400 dark:text-slate-500 font-bold uppercase">{log.timestamp}</span>
+                               </div>
+                               <p className="font-bold text-slate-800 dark:text-slate-100 mb-4 text-sm leading-relaxed">{log.pearl}</p>
+                               <div className="p-4 bg-slate-50 dark:bg-slate-950/50 rounded-xl border border-slate-100 dark:border-white/5 space-y-2 mt-auto">
+                                  <p className="text-xs text-slate-500 dark:text-slate-400"><span className="font-bold text-slate-700 dark:text-slate-300">Vignette Context:</span> <span className="line-clamp-2 mt-1">{log.vignette}</span></p>
+                                  <p className="text-xs text-slate-600 dark:text-slate-300 font-bold mt-2 pt-2 border-t border-slate-200 dark:border-white/5">Diagnosed: <span className="text-emerald-600 dark:text-emerald-400">{log.correctAnswer}</span></p>
+                               </div>
+                            </div>
+                          ))}
                         </div>
-                      ))}
+                      ) : (
+                        <div className="flex flex-col gap-3">
+                          {logs.map((log, idx) => (
+                            <div key={idx} className={`p-5 rounded-2xl border flex flex-col sm:flex-row gap-4 sm:items-center justify-between transition-all ${log.result === 'STABILIZED' ? 'bg-emerald-50/50 border-emerald-100 dark:bg-emerald-950/20 dark:border-emerald-900/50' : 'bg-rose-50/50 border-rose-100 dark:bg-rose-950/20 dark:border-rose-900/50'}`}>
+                              <div className="flex flex-col gap-2">
+                                <div className="flex items-center gap-3">
+                                  <span className={`text-xs font-black uppercase tracking-widest px-2 py-1 rounded-md ${log.result === 'STABILIZED' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300'}`}>
+                                    {log.result}
+                                  </span>
+                                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">{log.timestamp}</span>
+                                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">{log.specialty}</span>
+                                </div>
+                                <p className="text-sm font-medium text-slate-700 dark:text-slate-300 line-clamp-2">{log.vignette}</p>
+                              </div>
+                              <div className="flex flex-col sm:items-end gap-1 min-w-[150px] shrink-0 border-t sm:border-t-0 sm:border-l border-slate-200 dark:border-slate-800 pt-3 sm:pt-0 sm:pl-4">
+                                <span className="text-xs text-slate-500 font-bold uppercase">Your Action</span>
+                                <span className={`text-sm font-bold ${log.result === 'STABILIZED' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-slate-100'}`}>{log.userAnswer || "No Action"}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                  )}
               </div>
@@ -1617,10 +1718,11 @@ export default function App() {
               transition={{ duration: 0.2 }}
             >
               <RewardStore 
-                credits={stats.credits} 
+                credits={stats.credits || 0} 
                 onRedeem={(cost) => {
                   modifyStats(prev => {
-                    const next = { ...prev, credits: prev.credits - cost };
+                    const currentCredits = prev.credits || 0;
+                    const next = { ...prev, credits: Math.max(0, currentCredits - cost) };
                     return next;
                   });
                 }} 
@@ -1691,8 +1793,8 @@ export default function App() {
                     </div>
                   </div>
                   <div className="flex gap-4">
-                    <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} type="button" onClick={() => setShowSleepModal(false)} className="flex-1 py-4 font-bold rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition uppercase text-sm tracking-widest whitespace-nowrap">Cancel</motion.button>
-                    <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} type="submit" className="flex-[2] py-4 font-bold rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 transition uppercase text-sm tracking-widest">Execute Rest</motion.button>
+                    <motion.button whileTap={{ scale: 0.95 }} type="button" onClick={() => setShowSleepModal(false)} className="flex-1 py-4 font-bold rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition uppercase text-sm tracking-widest whitespace-nowrap">Cancel</motion.button>
+                    <motion.button whileTap={{ scale: 0.95 }} type="submit" className="flex-[2] py-4 font-bold rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-500/20 transition uppercase text-sm tracking-widest">Execute Rest</motion.button>
                   </div>
                 </form>
               </motion.div>
@@ -1704,7 +1806,7 @@ export default function App() {
         <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 z-50 shadow-[0_-5px_15px_rgba(0,0,0,0.1)] dark:shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
            <div className="flex items-center justify-around max-w-lg mx-auto w-full px-2 py-1">
              {NAV_TABS.map(tab => (
-                 <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
+                 <motion.button whileTap={{ scale: 0.95 }}
                    key={tab.id}
                    onClick={() => {
                      handleTabChange(tab.id as any);
@@ -1753,7 +1855,7 @@ export default function App() {
                     {["General / All", ...AVAILABLE_SUBJECTS].map(sub => {
                        const isSelected = selectedSubjects.includes(sub);
                        return (
-                         <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
+                         <motion.button whileTap={{ scale: 0.95 }}
                            type="button"
                            key={sub}
                            onClick={() => {
@@ -1777,8 +1879,8 @@ export default function App() {
                   </div>
                   
                   <div className="flex gap-4">
-                    <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} type="button" onClick={() => setManualLogModalOpen(false)} className="flex-1 py-4 font-bold rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition uppercase text-sm tracking-widest whitespace-nowrap">Cancel</motion.button>
-                    <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} type="submit" className="flex-[2] py-4 font-bold rounded-2xl bg-cyan-600 hover:bg-cyan-500 text-white shadow-lg shadow-cyan-500/20 transition uppercase text-sm tracking-widest">Save Log</motion.button>
+                    <motion.button whileTap={{ scale: 0.95 }} type="button" onClick={() => setManualLogModalOpen(false)} className="flex-1 py-4 font-bold rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 transition uppercase text-sm tracking-widest whitespace-nowrap">Cancel</motion.button>
+                    <motion.button whileTap={{ scale: 0.95 }} type="submit" className="flex-[2] py-4 font-bold rounded-2xl bg-cyan-600 hover:bg-cyan-500 text-white shadow-lg shadow-cyan-500/20 transition uppercase text-sm tracking-widest">Save Log</motion.button>
                   </div>
                 </form>
               </motion.div>

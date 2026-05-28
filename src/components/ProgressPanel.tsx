@@ -81,7 +81,7 @@ export default function ProgressPanel({ stats }: Props) {
     const dayName = d.toLocaleDateString("en-US", { weekday: "short" });
     timelineData.push({
       day: dayName,
-      cases: (stats.activityLogs && stats.activityLogs[dateStr]) || 0,
+      cases: (stats.triageCasesLogs && stats.triageCasesLogs[dateStr]) || 0,
       sleep: (stats.sleepLogs && stats.sleepLogs[dateStr]) || 0,
       mcqs: (stats.mcqLogs && stats.mcqLogs[dateStr]) || 0,
       videos: (stats.videoLogs && stats.videoLogs[dateStr]) || 0

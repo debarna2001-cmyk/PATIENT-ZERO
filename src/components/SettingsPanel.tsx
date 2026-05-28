@@ -18,6 +18,7 @@ export default function SettingsPanel({ targetExamDate, studentName, targetSpeci
   const [date, setDate] = useState(targetExamDate);
   const [name, setName] = useState(studentName);
   const [specialty, setSpecialty] = useState(targetSpecialty);
+  const [audioEnabled, setAudioEnabled] = useState(sound.isEnabled());
   const [notificationPermission, setNotificationPermission] = useState<string>("default");
 
   useEffect(() => {
@@ -131,6 +132,18 @@ export default function SettingsPanel({ targetExamDate, studentName, targetSpeci
             >
               <Save className="w-4 h-4" /> Update
             </motion.button>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-4 mt-8 max-w-sm">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Haptic & Audio Feedback</label>
+          <div className="flex bg-slate-800/80 rounded-xl p-1 border border-slate-700">
+            <button 
+              onClick={() => { sound.enable(true); setAudioEnabled(true); }}
+              className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${audioEnabled ? 'bg-cyan-600 text-slate-900 shadow-md' : 'text-slate-400 hover:text-slate-200'}`}>Enabled</button>
+            <button 
+              onClick={() => { sound.enable(false); setAudioEnabled(false); }}
+              className={`flex-1 py-2 text-sm font-bold rounded-lg transition ${!audioEnabled ? 'bg-rose-600 text-white shadow-md' : 'text-slate-400 hover:text-slate-200'}`}>Muted</button>
           </div>
         </div>
       </div>

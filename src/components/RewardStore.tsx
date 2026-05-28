@@ -14,10 +14,31 @@ const DEFAULT_REWARDS: RewardItem[] = [
   { id: "r2", title: "Play Video Games (45 min)", cost: 5, icon: "Gamepad2" },
   { id: "r3", title: "Order Fast Food", cost: 12, icon: "Pizza" },
   { id: "r4", title: "Listen to Music (30 min guilt-free)", cost: 2, icon: "Music" },
+  { id: "r5", title: "Night Out", cost: 30, icon: "Ticket" },
+  { id: "r6", title: "Cheat Day", cost: 100, icon: "Pizza" }
 ];
 
 export default function RewardStore({ credits, onRedeem }: Props) {
-  const [rewards, setRewards] = useState<RewardItem[]>(DEFAULT_REWARDS);
+  const [rewards, setRewards] = useState<RewardItem[]>(() => {
+    try {
+      const saved = localStorage.getItem("patient_zero_rewards");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          // Ensure any new default rewards are also included
+          const defaultIds = DEFAULT_REWARDS.map(d => d.id);
+          const existingIds = parsed.map(p => p.id);
+          const missingDefaults = DEFAULT_REWARDS.filter(d => !existingIds.includes(d.id));
+          return [...missingDefaults, ...parsed];
+        }
+      }
+    } catch(e) {}
+    return DEFAULT_REWARDS;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("patient_zero_rewards", JSON.stringify(rewards));
+  }, [rewards]);
   const [redeemed, setRedeemed] = useState<RedeemedReward[]>(() => {
     try {
       const saved = localStorage.getItem("patient_zero_redeemed");
@@ -112,7 +133,7 @@ export default function RewardStore({ credits, onRedeem }: Props) {
                       <span className="text-blue-600 font-bold text-sm bg-blue-50 px-2 py-0.5 rounded inline-block mt-1">{r.cost} CR</span>
                     </div>
                   </div>
-                  <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()}
+                  <motion.button whileTap={{ scale: 0.95 }}
                     onClick={() => handleRedeem(r)}
                     disabled={!canAfford}
                     className={`w-full py-2.5 rounded-xl font-bold text-sm transition-all ${
@@ -155,7 +176,7 @@ export default function RewardStore({ credits, onRedeem }: Props) {
                     className="w-full bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 px-4 py-2 rounded-xl text-sm font-semibold outline-none focus:border-blue-500 transition-colors"
                   />
                </div>
-               <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm py-2.5 rounded-xl shadow-md transition-colors">
+               <motion.button whileTap={{ scale: 0.95 }} type="submit" className="w-full bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm py-2.5 rounded-xl shadow-md transition-colors">
                   Create
                </motion.button>
             </form>
