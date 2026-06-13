@@ -1,12 +1,13 @@
 import { sound } from "../lib/audio";
 import { motion } from "motion/react";
-import { UserStats } from "../types";
-import { Crosshair, HelpCircle, Award, Target, AlertOctagon, HeartPulse, Zap, Bot, Loader2, Sparkles } from "lucide-react";
+import { UserStats, EmergencyLog } from "../types";
+import { Crosshair, HelpCircle, Award, Target, AlertOctagon, HeartPulse, Zap, Bot, Loader2, Sparkles, BookOpen } from "lucide-react";
 import { useState } from "react";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 
 interface Props {
   stats: UserStats;
+  logs: EmergencyLog[];
 }
 
 // Generate clinical ranks
@@ -19,7 +20,7 @@ const RANKS = [
 ];
 
 
-export default function ProgressPanel({ stats }: Props) {
+export default function ProgressPanel({ stats, logs }: Props) {
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewData, setReviewData] = useState<{ title: string; content: string; actionableAdvice: string[] } | null>(null);
 
@@ -55,23 +56,23 @@ export default function ProgressPanel({ stats }: Props) {
     pctToNextRank = (xpIntoRank / xpNeeded) * 100;
   }
 
-  // Radar data
+  // Subject Mastery Data
   const subjectPerformanceArray = Object.entries(stats.subjectPerformance || {}).map(([subject, data]) => {
     return {
       subject: subject.split(" ")[0], // abbreviate
       accuracy: data.total > 0 ? Math.floor((data.correct / data.total) * 100) : 0,
-      fullMark: 100,
+      total: data.total,
     };
   });
 
-  const fallbackRadar = [
-    { subject: 'Cardio', accuracy: 0, fullMark: 100 },
-    { subject: 'Neuro', accuracy: 0, fullMark: 100 },
-    { subject: 'Surg', accuracy: 0, fullMark: 100 },
-    { subject: 'Pharm', accuracy: 0, fullMark: 100 },
+  const fallbackSubjectData = [
+    { subject: 'Cardio', accuracy: 0, total: 0 },
+    { subject: 'Neuro', accuracy: 0, total: 0 },
+    { subject: 'Surg', accuracy: 0, total: 0 },
+    { subject: 'Pharm', accuracy: 0, total: 0 },
   ];
 
-  const radarData = subjectPerformanceArray.length > 2 ? subjectPerformanceArray : fallbackRadar;
+  const subjectChartData = subjectPerformanceArray.length > 0 ? subjectPerformanceArray : fallbackSubjectData;
 
   const timelineData = [];
   for (let i = 6; i >= 0; i--) {
@@ -162,27 +163,28 @@ export default function ProgressPanel({ stats }: Props) {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Specialty Radar Chart */}
+        {/* Specialty Analytics Chart */}
         <div className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm">
           <h3 className="font-bold text-slate-900 dark:text-slate-100 text-lg mb-6 flex items-center gap-2 tracking-tight">
             <Crosshair className="w-5 h-5 text-blue-500" />
-            Subject Wise Analytics
+            Subject Mastery & Engagement
           </h3>
           <div className="h-64 w-full flex items-center justify-center">
             {subjectPerformanceArray.length === 0 ? (
-              <div className="text-center text-slate-500 bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800 p-6 rounded-2xl">
+              <div className="text-center text-slate-500 bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800 p-6 rounded-2xl w-full">
                 <HelpCircle className="w-8 h-8 text-slate-300 dark:text-slate-700 mx-auto mb-2" />
                 <p className="font-medium text-sm">Insufficient clinical data.<br/>Manually log sessions to build accuracy radar.</p>
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
-                <RadarChart cx="50%" cy="50%" outerRadius="70%" data={radarData}>
-                  <PolarGrid stroke="#64748b" opacity={0.3} />
-                  <PolarAngleAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 11, fontWeight: 700 }} />
-                  <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: '#94a3b8' }} opacity={0.5} />
-                  <Radar name="Accuracy %" dataKey="accuracy" stroke="#00f0ff" fill="#3b82f6" fillOpacity={0.4} />
-                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '12px', color: '#fff', fontSize: '12px', fontWeight: 600 }} />
-                </RadarChart>
+                <BarChart data={subjectChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <XAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 11, fontWeight: 700 }} />
+                  <YAxis yAxisId="left" stroke="#3b82f6" orientation="left" domain={[0, 100]} tick={{ fontSize: 11 }} />
+                  <YAxis yAxisId="right" stroke="#10b981" orientation="right" tick={{ fontSize: 11 }} />
+                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '12px', fontWeight: 600 }} />
+                  <Bar yAxisId="left" dataKey="accuracy" name="Accuracy %" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  <Bar yAxisId="right" dataKey="total" name="Total Interventions" fill="#10b981" radius={[4, 4, 0, 0]} />
+                </BarChart>
               </ResponsiveContainer>
             )}
           </div>
@@ -278,6 +280,40 @@ export default function ProgressPanel({ stats }: Props) {
                  </li>
                ))}
              </ul>
+          </div>
+        )}
+      </div>
+
+      {/* High-Yield Clinical Pearls Vault */}
+      <div className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm overflow-hidden">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="font-bold text-slate-900 dark:text-slate-100 text-lg flex items-center gap-2 tracking-tight">
+            <BookOpen className="w-5 h-5 text-indigo-500" />
+            High-Yield Clinical Pearls
+          </h3>
+          <span className="text-xs font-bold bg-indigo-50 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 px-3 py-1 rounded-full">{logs.filter(l => l.result === "STABILIZED").length} Pearls Unlocked</span>
+        </div>
+        
+        {logs.filter(l => l.result === "STABILIZED").length === 0 ? (
+           <div className="text-center text-slate-500 bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800 p-8 rounded-2xl">
+             <HelpCircle className="w-8 h-8 text-slate-300 dark:text-slate-700 mx-auto mb-2" />
+             <p className="font-medium text-sm">No clinical pearls acquired yet.<br/>Successfully stabilize patients in Triage to unlock high-yield pearls.</p>
+           </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {logs.filter(l => l.result === "STABILIZED").map((log, idx) => (
+              <div key={idx} className="bg-indigo-50/50 dark:bg-slate-900/50 border border-indigo-100 dark:border-indigo-500/20 p-5 rounded-2xl flex flex-col h-full group transition-all hover:bg-white dark:hover:bg-slate-800 hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-500/50">
+                  <div className="flex justify-between items-start mb-3">
+                    <span className="text-[10px] font-black uppercase text-indigo-600 dark:text-indigo-400 tracking-widest bg-indigo-100 dark:bg-indigo-500/20 px-2 py-0.5 rounded-md">{log.specialty}</span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase">{log.timestamp.length > 8 ? log.timestamp.split(',')[0] : log.timestamp}</span>
+                  </div>
+                  <p className="font-bold text-slate-800 dark:text-slate-100 text-sm leading-relaxed mb-4">{log.pearl}</p>
+                  <div className="mt-auto px-4 py-3 bg-white dark:bg-slate-950/50 rounded-xl border border-slate-100 dark:border-white/5 space-y-1">
+                    <p className="text-[10px] text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest mb-1">Diagnosis Context</p>
+                    <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 line-clamp-1">{log.correctAnswer}</p>
+                  </div>
+              </div>
+            ))}
           </div>
         )}
       </div>

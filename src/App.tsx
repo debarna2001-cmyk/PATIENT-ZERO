@@ -164,6 +164,13 @@ export default function App() {
   };
 
   const [stats, setStats] = useState<UserStats>(DEFAULT_STATS);
+  const [statsLoaded, setStatsLoaded] = useState<boolean>(false);
+  const statsLoadedRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    statsLoadedRef.current = statsLoaded;
+  }, [statsLoaded]);
+
   const [missions, setMissions] = useState<Mission[]>(DEFAULT_MISSIONS);
   const [logs, setLogs] = useState<EmergencyLog[]>([]);
   const [moodLogs, setMoodLogs] = useState<MoodLog[]>([]);
@@ -193,43 +200,41 @@ export default function App() {
              const currentMondayStr = wkStart.toISOString().slice(0, 10);
              
              const isNewWeek = loadedStats.currentWeekStart !== currentMondayStr;
+             const isNewDay = loadedStats.lastMissionResetDate !== today;
 
-             if (loadedStats.lastMissionResetDate !== today) {
+             let needsUpdate = false;
+             const updates: any = {};
+
+             if (isNewDay) {
                  loadedStats.lastMissionResetDate = today;
-                 
-                 if (isNewWeek) {
-                     loadedStats.currentWeekStart = currentMondayStr;
-                     loadedStats.dutyDaysUsed = 0;
-                     loadedStats.restDaysUsed = 0;
-                 }
-                 
-                 setDoc(doc(db, "users", authUser.uid), loadedStats, { merge: true });
-                 
-                 import("firebase/firestore").then(({ getDocs, collection, setDoc, doc }) => {
+                 updates.lastMissionResetDate = today;
+                 needsUpdate = true;
+             }
+             
+             if (isNewWeek) {
+                 loadedStats.currentWeekStart = currentMondayStr;
+                 loadedStats.dutyDaysUsed = 0;
+                 loadedStats.restDaysUsed = 0;
+                 updates.currentWeekStart = currentMondayStr;
+                 updates.dutyDaysUsed = 0;
+                 updates.restDaysUsed = 0;
+                 needsUpdate = true;
+             }
+
+             if (needsUpdate && !docSnap.metadata.fromCache) {
+                 import("firebase/firestore").then(({ updateDoc, getDocs, collection, setDoc, doc: fDoc }) => {
+                     updateDoc(fDoc(db, "users", authUser.uid), updates).catch(console.error);
+                     
                      getDocs(collection(db, "users", authUser.uid, "missions")).then(msnap => {
                          msnap.docs.forEach(mdoc => {
                              const mData = mdoc.data() as Mission;
                              const period = mData.period || 'daily';
-                             const shouldReset = (period === 'daily') || (period === 'weekly' && isNewWeek);
+                             // If it's a new day, we reset daily missions.
+                             // If it's a new week, we reset weekly missions.
+                             const shouldReset = (isNewDay && period === 'daily') || (isNewWeek && period === 'weekly');
                              
                              if (shouldReset && (mData.current > 0 || mData.status !== "Pending")) {
-                                 setDoc(doc(db, "users", authUser.uid, "missions", mData.id), { ...mData, current: 0, status: "Pending" });
-                             }
-                         });
-                     }).catch(console.error);
-                 });
-             } else if (isNewWeek) {
-                 loadedStats.currentWeekStart = currentMondayStr;
-                 loadedStats.dutyDaysUsed = 0;
-                 loadedStats.restDaysUsed = 0;
-                 setDoc(doc(db, "users", authUser.uid), loadedStats, { merge: true });
-                 
-                 import("firebase/firestore").then(({ getDocs, collection, setDoc, doc }) => {
-                     getDocs(collection(db, "users", authUser.uid, "missions")).then(msnap => {
-                         msnap.docs.forEach(mdoc => {
-                             const mData = mdoc.data() as Mission;
-                             if (mData.period === 'weekly' && (mData.current > 0 || mData.status !== "Pending")) {
-                                 setDoc(doc(db, "users", authUser.uid, "missions", mData.id), { ...mData, current: 0, status: "Pending" });
+                                 setDoc(fDoc(db, "users", authUser.uid, "missions", mData.id), { ...mData, current: 0, status: "Pending" });
                              }
                          });
                      }).catch(console.error);
@@ -237,9 +242,10 @@ export default function App() {
              }
              
              setStats(loadedStats);
+             setStatsLoaded(true);
         } else {
              // init
-             setDoc(doc(db, "users", authUser.uid), DEFAULT_STATS).catch(e => handleFirestoreError(e, OperationType.CREATE, "users"));
+             setDoc(doc(db, "users", authUser.uid), DEFAULT_STATS).then(() => setStatsLoaded(true)).catch(e => handleFirestoreError(e, OperationType.CREATE, "users"));
         }
     }, (error) => handleFirestoreError(error, OperationType.GET, "users"));
 
@@ -364,7 +370,9 @@ export default function App() {
          const next = modifier(mergedPrev);
          const currentUser = auth.currentUser;
          if (currentUser) {
-            setDoc(doc(db, "users", currentUser.uid), next, { merge: true }).catch(e => handleFirestoreError(e, OperationType.UPDATE, "users"));
+            if (statsLoadedRef.current) {
+               setDoc(doc(db, "users", currentUser.uid), next, { merge: true }).catch(e => handleFirestoreError(e, OperationType.UPDATE, "users"));
+            }
          } else {
             localStorage.setItem("patient_zero_v2_stats", JSON.stringify(next));
          }
@@ -477,8 +485,8 @@ export default function App() {
 
   const triggerManualStabilize = (type: 'QuickMCQ' | 'FullStudy' | 'QuickBreak', subjects: string[] = []) => {
     modifyStats((prev) => {
-      let hpReward = 15; let xpReward = 50; let crdtReward = 1;
-      if (type === 'FullStudy') { hpReward = 35; xpReward = 150; crdtReward = 3; }
+      let hpReward = 15; let xpReward = 50; let crdtReward = 0;
+      if (type === 'FullStudy') { hpReward = 35; xpReward = 150; crdtReward = 0; }
       else if (type === 'QuickBreak') { hpReward = 10; xpReward = 10; crdtReward = 0; }
       const rawHealth = prev.patientHealth + hpReward;
       const rawBurnout = prev.burnoutIndex - (type === 'QuickBreak' ? 30 : 10);
@@ -1026,11 +1034,11 @@ export default function App() {
                       </motion.button>
 
                       <motion.button whileTap={{ scale: 0.95 }}
-                        onClick={() => { setActiveTab("vault"); }}
+                        onClick={() => { setActiveTab("progress"); }}
                         className="p-6 border border-white/50 backdrop-blur-md bg-white dark:bg-slate-900/40 hover:bg-white dark:bg-slate-900/60 hover:border-blue-300 hover:shadow-lg text-left rounded-3xl transition-all group"
                       >
                         <BookOpen className="w-7 h-7 text-blue-500 mb-4 group-hover:scale-110 transition-transform" />
-                        <span className="font-bold text-slate-900 dark:text-slate-100 block mb-2">High-Yield Vault</span>
+                        <span className="font-bold text-slate-900 dark:text-slate-100 block mb-2">High-Yield Pearls</span>
                         <p className="text-sm text-slate-500 font-medium leading-relaxed">
                           Review clinical pearls from past cases.
                         </p>
@@ -1213,7 +1221,7 @@ export default function App() {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
-              <ProgressPanel stats={stats} />
+              <ProgressPanel stats={stats} logs={logs} />
               <div className="mt-10 pt-10 border-t border-slate-200 dark:border-slate-800">
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="font-bold text-slate-900 dark:text-slate-100 text-xl tracking-tight">Clinical Operation History</h3>
@@ -1224,81 +1232,7 @@ export default function App() {
             </motion.div>
           )}
 
-          {activeTab === "vault" && (
-             <motion.div
-              key="vault"
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.2 }}
-            >
-              <div className="flex flex-col gap-6">
-                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-4 border-b border-white/10 dark:border-slate-800">
-                   <div className="flex items-center gap-4">
-                     <div className="w-12 h-12 bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 rounded-2xl flex items-center justify-center">
-                       <BookOpen className="w-6 h-6" />
-                     </div>
-                     <div>
-                       <h2 className="text-2xl font-black text-slate-900 dark:text-slate-100 uppercase tracking-tight">Clinical Records</h2>
-                       <p className="text-slate-500 text-sm">Review clinical pearls and operation history.</p>
-                     </div>
-                   </div>
-                   <div className="flex items-center gap-2 bg-slate-100 dark:bg-slate-800/50 p-1 rounded-xl">
-                     <button onClick={() => setVaultView("pearls")} className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${vaultView === 'pearls' ? 'bg-white dark:bg-slate-700 shadow-sm text-emerald-600 dark:text-emerald-400' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>High-Yield Pearls</button>
-                     <button onClick={() => setVaultView("history")} className={`px-4 py-2 text-sm font-bold rounded-lg transition-all ${vaultView === 'history' ? 'bg-white dark:bg-slate-700 shadow-sm text-blue-600 dark:text-blue-400' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}>Operation History</button>
-                   </div>
-                 </div>
 
-                 {logs.length === 0 ? (
-                    <div className="py-24 flex flex-col items-center justify-center text-center border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-3xl bg-slate-50 dark:bg-slate-900/30">
-                       <FileText className="w-12 h-12 text-slate-400 dark:text-slate-600 mb-4" />
-                       <p className="text-slate-500 dark:text-slate-400 font-medium">No clinical records acquired yet.<br/>Complete Triage cases to populate this vault.</p>
-                    </div>
-                 ) : (
-                    <div className="flex flex-col gap-6">
-                      {vaultView === "pearls" ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                          {logs.filter(l => l.result === "STABILIZED").map((log, idx) => (
-                            <div key={idx} className="bg-white dark:bg-slate-900/50 backdrop-blur-md border border-slate-200 dark:border-white/10 p-6 rounded-2xl hover:border-emerald-300 dark:hover:border-emerald-500/30 hover:-translate-y-1 hover:shadow-lg transition-all shadow border-b-4 border-b-slate-200 dark:border-b-white/10 flex flex-col h-full group">
-                               <div className="flex justify-between items-start mb-4">
-                                  <span className="text-xs font-black uppercase text-emerald-600 dark:text-emerald-400 tracking-widest bg-emerald-100 dark:bg-emerald-500/10 px-3 py-1 rounded-full">{log.specialty}</span>
-                                  <span className="text-xs text-slate-400 dark:text-slate-500 font-bold uppercase">{log.timestamp}</span>
-                               </div>
-                               <p className="font-bold text-slate-800 dark:text-slate-100 mb-4 text-sm leading-relaxed">{log.pearl}</p>
-                               <div className="p-4 bg-slate-50 dark:bg-slate-950/50 rounded-xl border border-slate-100 dark:border-white/5 space-y-2 mt-auto">
-                                  <p className="text-xs text-slate-500 dark:text-slate-400"><span className="font-bold text-slate-700 dark:text-slate-300">Vignette Context:</span> <span className="line-clamp-2 mt-1">{log.vignette}</span></p>
-                                  <p className="text-xs text-slate-600 dark:text-slate-300 font-bold mt-2 pt-2 border-t border-slate-200 dark:border-white/5">Diagnosed: <span className="text-emerald-600 dark:text-emerald-400">{log.correctAnswer}</span></p>
-                               </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="flex flex-col gap-3">
-                          {logs.map((log, idx) => (
-                            <div key={idx} className={`p-5 rounded-2xl border flex flex-col sm:flex-row gap-4 sm:items-center justify-between transition-all ${log.result === 'STABILIZED' ? 'bg-emerald-50/50 border-emerald-100 dark:bg-emerald-950/20 dark:border-emerald-900/50' : 'bg-rose-50/50 border-rose-100 dark:bg-rose-950/20 dark:border-rose-900/50'}`}>
-                              <div className="flex flex-col gap-2">
-                                <div className="flex items-center gap-3">
-                                  <span className={`text-xs font-black uppercase tracking-widest px-2 py-1 rounded-md ${log.result === 'STABILIZED' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300' : 'bg-rose-100 text-rose-700 dark:bg-rose-900 dark:text-rose-300'}`}>
-                                    {log.result}
-                                  </span>
-                                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">{log.timestamp}</span>
-                                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400">{log.specialty}</span>
-                                </div>
-                                <p className="text-sm font-medium text-slate-700 dark:text-slate-300 line-clamp-2">{log.vignette}</p>
-                              </div>
-                              <div className="flex flex-col sm:items-end gap-1 min-w-[150px] shrink-0 border-t sm:border-t-0 sm:border-l border-slate-200 dark:border-slate-800 pt-3 sm:pt-0 sm:pl-4">
-                                <span className="text-xs text-slate-500 font-bold uppercase">Your Action</span>
-                                <span className={`text-sm font-bold ${log.result === 'STABILIZED' ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-900 dark:text-slate-100'}`}>{log.userAnswer || "No Action"}</span>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                 )}
-              </div>
-            </motion.div>
-          )}
 
           {activeTab === "avatar" && (
             <motion.div

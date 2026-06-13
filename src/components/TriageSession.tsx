@@ -144,14 +144,21 @@ export default function TriageSession({
     if (currentCase) {
         setSessionHistory(prev => [...prev, { case: currentCase, success: false }]);
     }
-    modifyStats((prev) => {
-      const next = logActivity({ ...prev, patientsFlatlined: prev.patientsFlatlined + 1, patientHealth: Math.max(0, prev.patientHealth - 25), shiftStreak: 0 }, { cases: 1 });
-      return next;
-    });
-    if (currentCase) {
-      const newLog: EmergencyLog = { id: `log-${Date.now()}`, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), patientName: currentCase.patientName, specialty: currentCase.specialty, result: "FLATLINED", vignette: currentCase.clinicalVignette, userAnswer: selectedAnswer || ("-" as any), correctAnswer: currentCase.correctAnswer, pearl: currentCase.highYieldPearl };
-      updateLogs([newLog, ...logs]);
-    }
+      modifyStats((prev) => {
+        const performance = { ...(prev.subjectPerformance || {}) };
+        if (currentCase) {
+          const sub = currentCase.specialty;
+          if (!performance[sub]) performance[sub] = { total: 0, correct: 0 };
+          performance[sub].total += 1;
+        }
+
+        const next = logActivity({ ...prev, patientsFlatlined: prev.patientsFlatlined + 1, patientHealth: Math.max(0, prev.patientHealth - 25), shiftStreak: 0, subjectPerformance: performance }, { cases: 1 });
+        return next;
+      });
+      if (currentCase) {
+        const newLog: EmergencyLog = { id: `log-${Date.now()}`, timestamp: new Date().toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }), patientName: currentCase.patientName, specialty: currentCase.specialty, result: "FLATLINED", vignette: currentCase.clinicalVignette, userAnswer: selectedAnswer || ("-" as any), correctAnswer: currentCase.correctAnswer, pearl: currentCase.highYieldPearl };
+        updateLogs([newLog, ...logs]);
+      }
   };
 
   const submitRemedy = () => {
@@ -177,7 +184,7 @@ export default function TriageSession({
         const next = logActivity({ ...prev, xp: (prev.xp || 0) + earnedXP, credits: (prev.credits || 0) + earnedCredits, patientHealth: Math.min(100, prev.patientHealth + 30), patientsSaved: prev.patientsSaved + 1, shiftStreak: prev.shiftStreak + 1, unlockedPearlsCount: prev.unlockedPearlsCount + 1, subjectPerformance: performance }, { cases: 1 });
         return next;
       });
-      const newLog: EmergencyLog = { id: `log-${Date.now()}`, timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }), patientName: currentCase.patientName, specialty: currentCase.specialty, result: "STABILIZED", vignette: currentCase.clinicalVignette, userAnswer: selectedAnswer, correctAnswer: currentCase.correctAnswer, pearl: currentCase.highYieldPearl };
+      const newLog: EmergencyLog = { id: `log-${Date.now()}`, timestamp: new Date().toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }), patientName: currentCase.patientName, specialty: currentCase.specialty, result: "STABILIZED", vignette: currentCase.clinicalVignette, userAnswer: selectedAnswer, correctAnswer: currentCase.correctAnswer, pearl: currentCase.highYieldPearl };
       updateLogs([newLog, ...logs]);
       setSessionHistory(prev => [...prev, { case: currentCase, success: true }]);
       const mcqM = missions.find(m => m.category === "MCQ");

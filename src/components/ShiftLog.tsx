@@ -44,9 +44,11 @@ export default function ShiftLog({ logs }: Props) {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 text-xs font-bold text-slate-400">
-                  <Clock className="w-3.5 h-3.5" />
-                  {log.timestamp}
+                <div className="flex flex-col items-end gap-1 text-[11px] font-bold text-slate-400">
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md">
+                    <Clock className="w-3 h-3" />
+                    <span>{log.timestamp}</span>
+                  </div>
                 </div>
               </div>
 

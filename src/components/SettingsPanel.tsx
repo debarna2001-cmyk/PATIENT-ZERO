@@ -30,6 +30,28 @@ export default function SettingsPanel({ targetExamDate, studentName, targetSpeci
     setNotificationPermission(getNotificationPermission());
   }, []);
 
+  const getDaysTracked = () => {
+    if (!stats) return 1;
+    let earliestDate = new Date().toISOString().split("T")[0];
+    
+    // Check first log date if available
+    if (logs && logs.length > 0) {
+      const sortedLogs = [...logs].sort((a,b) => a.timestamp.localeCompare(b.timestamp));
+      if (sortedLogs[0].timestamp) earliestDate = sortedLogs[0].timestamp.split("T")[0];
+    } else if (stats.activityLogs && Object.keys(stats.activityLogs).length > 0) {
+      // Check activity logs
+      earliestDate = Object.keys(stats.activityLogs).sort()[0];
+    } else if (stats.lastMissionResetDate) {
+      earliestDate = stats.lastMissionResetDate;
+    }
+
+    const start = new Date(earliestDate).getTime();
+    const now = new Date().getTime();
+    const diff = Math.max(0, now - start);
+    return Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  };
+  const daysTracked = getDaysTracked();
+
   const handleSaveDate = () => {
     onUpdateDate(date);
     alert("Target date updated.");
@@ -240,6 +262,9 @@ export default function SettingsPanel({ targetExamDate, studentName, targetSpeci
            <div>
              <h4 className="font-bold text-slate-300">Export Simulation Data</h4>
              <p className="text-sm text-slate-500 font-medium mt-1">Download a local JSON backup of your stats, logs, and missions.</p>
+             <p className="inline-block mt-3 text-xs tracking-widest uppercase font-bold text-emerald-400 bg-emerald-950/40 border border-emerald-500/20 px-3 py-1.5 rounded-lg shadow-sm">
+               System Active: {daysTracked} {daysTracked === 1 ? 'Day' : 'Days'}
+             </p>
            </div>
            <motion.button whileTap={{ scale: 0.95 }} onPointerDown={() => sound.click()} 
              onClick={handleExportData}
