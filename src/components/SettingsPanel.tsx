@@ -34,18 +34,17 @@ export default function SettingsPanel({ targetExamDate, studentName, targetSpeci
     if (!stats) return 1;
     let earliestDate = new Date().toISOString().split("T")[0];
     
-    // Check first log date if available
-    if (logs && logs.length > 0) {
-      const sortedLogs = [...logs].sort((a,b) => a.timestamp.localeCompare(b.timestamp));
-      if (sortedLogs[0].timestamp) earliestDate = sortedLogs[0].timestamp.split("T")[0];
-    } else if (stats.activityLogs && Object.keys(stats.activityLogs).length > 0) {
-      // Check activity logs
+    // The timestamp in logs does not contain a year (e.g. "Jun 13, 07:03 AM")
+    // parsing it returns NaN. We will use activityLogs or lastMissionResetDate instead.
+    if (stats.activityLogs && Object.keys(stats.activityLogs).length > 0) {
       earliestDate = Object.keys(stats.activityLogs).sort()[0];
     } else if (stats.lastMissionResetDate) {
       earliestDate = stats.lastMissionResetDate;
     }
 
     const start = new Date(earliestDate).getTime();
+    if (isNaN(start)) return 1; // Failsafe
+    
     const now = new Date().getTime();
     const diff = Math.max(0, now - start);
     return Math.max(1, Math.ceil(diff / (1000 * 60 * 60 * 24)));

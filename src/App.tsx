@@ -331,7 +331,7 @@ export default function App() {
         setLogs(snapshot.docs.map(d => {
             const data = d.data() as EmergencyLog;
             return { ...data, id: d.id };
-        }).sort((a,b) => new Date(`1970/01/01 ${b.timestamp}`).getTime() - new Date(`1970/01/01 ${a.timestamp}`).getTime()));
+        }).sort((a,b) => b.id.localeCompare(a.id)));
     }, (e) => handleFirestoreError(e, OperationType.GET, "logs"));
 
     const moodsUnsub = onSnapshot(collection(db, "users", authUser.uid, "moods"), (snapshot) => {
@@ -407,7 +407,10 @@ export default function App() {
     setMissions(newMissions);
     if (authUser) {
       newMissions.forEach(m => {
-        setDoc(doc(db, "users", authUser.uid, "missions", m.id), m).catch(e => handleFirestoreError(e, OperationType.UPDATE, "missions"));
+        const oldM = missions.find(om => om.id === m.id);
+        if (!oldM || JSON.stringify(oldM) !== JSON.stringify(m)) {
+          setDoc(doc(db, "users", authUser.uid, "missions", m.id), m).catch(e => handleFirestoreError(e, OperationType.UPDATE, "missions"));
+        }
       });
     } else {
       localStorage.setItem("patient_zero_v2_missions", JSON.stringify(newMissions));
@@ -418,7 +421,10 @@ export default function App() {
     setLogs(newLogs);
     if (authUser) {
       newLogs.forEach(l => {
-        setDoc(doc(db, "users", authUser.uid, "logs", l.id), l).catch(e => handleFirestoreError(e, OperationType.UPDATE, "logs"));
+        const oldL = logs.find(ol => ol.id === l.id);
+        if (!oldL) {
+          setDoc(doc(db, "users", authUser.uid, "logs", l.id), l).catch(e => handleFirestoreError(e, OperationType.UPDATE, "logs"));
+        }
       });
     } else {
       localStorage.setItem("patient_zero_v2_logs", JSON.stringify(newLogs));
@@ -428,10 +434,11 @@ export default function App() {
   const updateMoodLogs = (newLogs: MoodLog[]) => {
     setMoodLogs(newLogs);
     if (authUser) {
-      // For simplicity in UI logic that expects array append, we'll just write the newly added mood log.
-      // But let's follow the shape of rewriting array elements for simplicity.
-      newLogs.forEach((l, i) => {
-        setDoc(doc(db, "users", authUser.uid, "moods", `mood-${l.timestamp.replace(/[:\/ ]/g, '-')}`), l).catch(e => handleFirestoreError(e, OperationType.UPDATE, "moods"));
+      newLogs.forEach((l) => {
+        const oldL = moodLogs.find(ol => ol.timestamp === l.timestamp);
+        if (!oldL) {
+          setDoc(doc(db, "users", authUser.uid, "moods", `mood-${l.timestamp.replace(/[:\/ ]/g, '-')}`), l).catch(e => handleFirestoreError(e, OperationType.UPDATE, "moods"));
+        }
       });
     } else {
       localStorage.setItem("patient_zero_v2_mood", JSON.stringify(newLogs));
