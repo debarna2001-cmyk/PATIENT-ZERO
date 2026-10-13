@@ -74,11 +74,11 @@ app.post("/api/cases/generate", async (req, res) => {
     );
     const options = filtered.length > 0 ? filtered : fallbackCases;
     const randomCase = options[Math.floor(Math.random() * options.length)];
-    // Return a copy with a generated dynamic ID
-    return res.json({
+    // Return an array copy with a generated dynamic ID
+    return res.json([{
       ...randomCase,
       id: `local-${Date.now()}-${Math.floor(Math.random() * 1000)}`
-    });
+    }]);
   }
 
   try {

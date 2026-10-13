@@ -1,5 +1,6 @@
 import { EmergencyLog } from "../types";
 import { ShieldCheck, ShieldAlert, Clock, Stethoscope } from "lucide-react";
+import { formatDateTimeDMY } from "../lib/dateUtils";
 
 interface Props {
   logs: EmergencyLog[];
@@ -24,42 +25,42 @@ export default function ShiftLog({ logs }: Props) {
             key={log.id} 
             className={`border rounded-2xl p-5 flex flex-col md:flex-row gap-6 transition-all ${
               isSuccess 
-                ? "bg-emerald-50/30 border-emerald-100 hover:border-emerald-200" 
-                : "bg-red-50/30 border-red-100 hover:border-red-200"
+                ? "bg-emerald-50/30 border-emerald-100 dark:border-emerald-900/40 hover:border-emerald-200" 
+                : "bg-indigo-50/30 dark:bg-slate-900/40 border-indigo-100 dark:border-indigo-900/40 hover:border-indigo-200"
             }`}
           >
             <div className="flex-1 w-full flex flex-col gap-3">
-              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
                 <div className="flex items-center gap-3">
                   <div className={`p-2 rounded-xl border ${
-                    isSuccess ? "bg-emerald-100 text-emerald-600 border-emerald-200" : "bg-red-100 text-red-600 border-red-200"
+                    isSuccess ? "bg-emerald-100 dark:bg-emerald-950/70 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" : "bg-indigo-100 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 border-indigo-200 dark:border-indigo-800"
                   }`}>
                     {isSuccess ? <ShieldCheck className="w-5 h-5" /> : <ShieldAlert className="w-5 h-5" />}
                   </div>
                   <div>
-                     <span className={`text-[10px] font-bold uppercase tracking-widest block mb-0.5 ${isSuccess ? "text-emerald-600" : "text-red-500"}`}>
-                      {log.result}
+                     <span className={`text-[10px] font-bold uppercase tracking-widest block mb-0.5 ${isSuccess ? "text-emerald-600 dark:text-emerald-400" : "text-indigo-600 dark:text-indigo-400"}`}>
+                      {log.result === "STABILIZED" ? "Case Cleared" : "Clinical Pearl Unlocked"}
                     </span>
                     <h4 className="font-bold text-slate-900 dark:text-slate-100 leading-none">{log.patientName} <span className="text-slate-400 font-medium">({log.specialty})</span></h4>
                   </div>
                 </div>
 
                 <div className="flex flex-col items-end gap-1 text-[11px] font-bold text-slate-400">
-                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md">
-                    <Clock className="w-3 h-3" />
-                    <span>{log.timestamp}</span>
+                  <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-md font-mono text-[10px]">
+                    <Clock className="w-3 h-3 text-cyan-500" />
+                    <span>{formatDateTimeDMY(log.date || log.timestamp)}</span>
                   </div>
                 </div>
               </div>
 
-              <div className="text-sm font-medium text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 leading-relaxed">
+              <div className="text-sm font-medium text-slate-600 dark:text-slate-400 bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 leading-relaxed">
                 {log.vignette}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-1">
                 <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-3 flex flex-col gap-1">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Your Action Initiated</span>
-                  <span className={`text-sm font-bold ${isSuccess ? 'text-emerald-600' : 'text-red-500'}`}>
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Selected Choice</span>
+                  <span className={`text-sm font-bold ${isSuccess ? 'text-emerald-600 dark:text-emerald-400' : 'text-amber-600 dark:text-amber-400'}`}>
                     Option {log.userAnswer}
                   </span>
                 </div>

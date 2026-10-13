@@ -142,9 +142,10 @@ class ICUSoundEngine {
   }
 
   /**
-   * Synthesizes a flatlining alarm tone or error click.
+   * Synthesizes a gentle, warm cognitive insight chime for learning pivots.
+   * Grounded in supportive feedback design: no alarming sawtooth buzzes.
    */
-  public flatlineAlert() {
+  public gentleInsight() {
     if (!this.soundEnabled) return;
     const ctx = this.initCtx();
     if (!ctx) return;
@@ -156,15 +157,146 @@ class ICUSoundEngine {
       osc.connect(gain);
       gain.connect(ctx.destination);
 
-      osc.type = "sawtooth";
-      osc.frequency.setValueAtTime(110, ctx.currentTime);
+      // Warm pure sine tone with soft decay (320Hz gentle acoustic chime)
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(320, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(260, ctx.currentTime + 0.28);
 
-      gain.gain.setValueAtTime(0.015, ctx.currentTime); // Lower volume
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+      gain.gain.setValueAtTime(0.015, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.28);
 
       osc.start();
-      osc.stop(ctx.currentTime + 0.36);
+      osc.stop(ctx.currentTime + 0.29);
     } catch (e) {
+      // safe fallback
+    }
+  }
+
+  /**
+   * Backward-compatible alias for non-alarming feedback
+   */
+  public flatlineAlert() {
+    this.gentleInsight();
+  }
+
+  /**
+   * Warm acoustic restorative chime for protocol stage transitions and milestones.
+   * Produces a peaceful, resonant dual-sine singing bowl overtone.
+   */
+  public playRestorativeChime(type: 'phase' | 'bell' | 'complete' | 'topup' = 'phase') {
+    if (!this.soundEnabled) return;
+    const ctx = this.initCtx();
+    if (!ctx) return;
+
+    try {
+      const now = ctx.currentTime;
+
+      if (type === 'bell' || type === 'phase') {
+        // Dual harmonic singing bowl (528 Hz Love/DNA frequency + 792 Hz gentle 5th overtone)
+        const fundamental = type === 'phase' ? 528 : 432;
+        const overtone = fundamental * 1.5;
+
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const gain1 = ctx.createGain();
+        const gain2 = ctx.createGain();
+
+        osc1.type = "sine";
+        osc2.type = "sine";
+        osc1.frequency.setValueAtTime(fundamental, now);
+        osc2.frequency.setValueAtTime(overtone, now);
+
+        gain1.gain.setValueAtTime(0.001, now);
+        gain1.gain.linearRampToValueAtTime(0.022, now + 0.08);
+        gain1.gain.exponentialRampToValueAtTime(0.0001, now + 1.8);
+
+        gain2.gain.setValueAtTime(0.001, now);
+        gain2.gain.linearRampToValueAtTime(0.009, now + 0.06);
+        gain2.gain.exponentialRampToValueAtTime(0.0001, now + 1.2);
+
+        osc1.connect(gain1);
+        osc2.connect(gain2);
+        gain1.connect(ctx.destination);
+        gain2.connect(ctx.destination);
+
+        osc1.start(now);
+        osc2.start(now);
+        osc1.stop(now + 1.85);
+        osc2.stop(now + 1.25);
+      } else if (type === 'complete') {
+        // Tri-tone restorative resolution chord (A major calm resolution: 440, 554.37, 659.25)
+        const freqs = [440, 554.37, 659.25];
+        freqs.forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = "sine";
+          osc.frequency.setValueAtTime(freq, now + idx * 0.12);
+
+          const startTime = now + idx * 0.12;
+          gain.gain.setValueAtTime(0.001, startTime);
+          gain.gain.linearRampToValueAtTime(0.02, startTime + 0.06);
+          gain.gain.exponentialRampToValueAtTime(0.0001, startTime + 2.2);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc.start(startTime);
+          osc.stop(startTime + 2.25);
+        });
+      }
+    } catch {
+      // safe fallback
+    }
+  }
+
+  /**
+   * Ultra-soft respiratory guidance tone for closed-eye breathing pacing
+   */
+  public playBreathingCue(phase: 'inhale' | 'topup' | 'exhale') {
+    if (!this.soundEnabled) return;
+    const ctx = this.initCtx();
+    if (!ctx) return;
+
+    try {
+      const now = ctx.currentTime;
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      if (phase === 'inhale') {
+        // Gentle ascending breath sine (220Hz -> 330Hz)
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(220, now);
+        osc.frequency.linearRampToValueAtTime(320, now + 0.45);
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.linearRampToValueAtTime(0.015, now + 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.5);
+        osc.start(now);
+        osc.stop(now + 0.52);
+      } else if (phase === 'topup') {
+        // Quick subtle higher bell chirp (480Hz)
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.linearRampToValueAtTime(528, now + 0.15);
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.linearRampToValueAtTime(0.018, now + 0.04);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.28);
+        osc.start(now);
+        osc.stop(now + 0.3);
+      } else {
+        // Gentle descending release tone (330Hz -> 196Hz)
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(300, now);
+        osc.frequency.linearRampToValueAtTime(196, now + 0.65);
+        gain.gain.setValueAtTime(0.001, now);
+        gain.gain.linearRampToValueAtTime(0.014, now + 0.1);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + 0.7);
+        osc.start(now);
+        osc.stop(now + 0.72);
+      }
+    } catch {
       // safe fallback
     }
   }

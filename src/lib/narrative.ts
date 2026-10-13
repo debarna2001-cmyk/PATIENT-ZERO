@@ -34,29 +34,29 @@ export function getNarrativeState(stats: UserStats): NarrativeState {
   const health = stats.patientHealth ?? 100;
   const streak = stats.shiftStreak ?? 0;
   
-  if (health < 25) {
-    patientCondition = 'critical';
-  } else if (health < 50 && streak < 2) {
-    patientCondition = 'deteriorating';
-  } else if (health > 65 && streak > 5) {
+  if (health < 40) {
     patientCondition = 'recovering';
+  } else if (health < 65) {
+    patientCondition = 'stable';
+  } else {
+    patientCondition = 'stable';
   }
 
-  let patientConditionLabel = 'Stable condition. Status quo maintained.';
-  if (patientCondition === 'critical') patientConditionLabel = 'Patient in critical condition. Immediate intervention required.';
-  else if (patientCondition === 'deteriorating') patientConditionLabel = 'Patient condition deteriorating. Escalation protocol recommended.';
-  else if (patientCondition === 'recovering') patientConditionLabel = 'Patient recovering. Continue current therapeutic momentum.';
+  let patientConditionLabel = 'Optimal homeostasis. Steady operational baseline maintained.';
+  if (health < 40) patientConditionLabel = 'Restorative buffer active. Steady daily micro-habits rebuild cognitive stamina.';
+  else if (health >= 65 && streak > 3) patientConditionLabel = 'High physiological reserve. Diagnostic acumen and retention are peaking.';
+  else patientConditionLabel = 'Stable condition. Daily habit rhythm is consistent.';
 
   const burnout = stats.burnoutIndex ?? 0;
 
-  // Chief tone
+  // Chief tone - supportive, precise, evidence-based clinical mentor
   let chiefTone: NarrativeState['chiefTone'] = 'mentoring';
-  if (phase === 'terminal') {
-    chiefTone = 'wartime';
-  } else if (phase === 'critical_descent' || burnout > 65) {
+  if (burnout > 70) {
+    chiefTone = 'mentoring';
+  } else if (phase === 'terminal') {
     chiefTone = 'urgent';
-  } else if (phase === 'deep_ops') {
-    chiefTone = 'demanding';
+  } else {
+    chiefTone = 'mentoring';
   }
 
   // Weakest subject
@@ -77,52 +77,44 @@ export function getNarrativeState(stats: UserStats): NarrativeState {
   const saved = stats.patientsSaved ?? 0;
 
   if (days === 30) {
-    activeNarrativeEvent = "ALERT: Final month initiated. All resources redirect to the patient.";
+    activeNarrativeEvent = "Final month: Focus on calm daily pacing, high-yield retrieval, and adequate sleep.";
   } else if (days === 90) {
-    activeNarrativeEvent = "Phase III activated. Critical Descent has begun. No missed shifts.";
-  } else if (patientCondition === 'critical' && phase === 'critical_descent') {
-    activeNarrativeEvent = "CRITICAL FAILURE during descent phase. Immediate protocol activation required.";
-  } else if (burnout > 80 && health > 60) {
-    activeNarrativeEvent = "Overexertion detected. Sustained performance requires controlled recovery.";
+    activeNarrativeEvent = "Quarterly milestone reached: Systematic revision and steady habit rhythms.";
+  } else if (burnout > 75) {
+    activeNarrativeEvent = "Cognitive demand detected: Prioritize restorative rest to sustain peak retrieval accuracy.";
   } else if (streak === 30) {
-    activeNarrativeEvent = "30 consecutive shifts. Command has taken notice. The patient is responding.";
+    activeNarrativeEvent = "30 consecutive shifts. Remarkable habit continuity. Long-term adherence achieved.";
   } else if (streak === 14) {
-    activeNarrativeEvent = "14-day operational streak confirmed. Unbreakable status approaching.";
+    activeNarrativeEvent = "14-day operational streak confirmed. Deep behavioral groove established.";
   } else if (streak === 7) {
-    activeNarrativeEvent = "One week of unbroken operations. Preparation vitals are climbing.";
+    activeNarrativeEvent = "One full week of unbroken operations. Preparation momentum is compounding.";
   } else if (saved === 1) {
-    activeNarrativeEvent = "First patient stabilized. The simulation is live.";
+    activeNarrativeEvent = "First clinical case resolved. Welcome to deliberate retrieval practice.";
   } else if (weakestSubject !== null && weakestSubject.accuracy < 0.40) {
-    activeNarrativeEvent = `WARNING: ${weakestSubject.name} sector compromised at ${Math.round(weakestSubject.accuracy * 100)}% efficiency. Prioritize.`;
+    activeNarrativeEvent = `Targeted Insight: Fortify ${weakestSubject.name} fundamentals with focused micro-sessions.`;
   }
 
   // Mission briefing
-  let missionBriefing = `${days} days to the extraction point. Establish your operational baseline.`;
+  let missionBriefing = `${days} days to the examination. Sustain your daily operational rhythm.`;
   if (phase === 'terminal') {
-    missionBriefing = `${days} day(s) to extraction. Every protocol is consequential.`;
-  } else if (patientCondition === 'critical') {
-    missionBriefing = "Patient in critical condition. Stabilization is the only priority.";
-  } else if (patientCondition === 'deteriorating') {
-    missionBriefing = "Preparation state deteriorating. Complete today's protocols without exception.";
+    missionBriefing = `${days} day(s) to examination. Maintain calm composure and review high-yield pearls.`;
+  } else if (health < 40) {
+    missionBriefing = "Restorative buffer active. Prioritize low-friction micro-habits and restful sleep.";
   } else if (streak >= 10) {
-    missionBriefing = `${streak}-shift streak active. ${days} days to extraction. Maintain tempo.`;
+    missionBriefing = `${streak}-shift streak active. ${days} days remaining. Steady adherence wins the marathon.`;
   } else if (phase === 'critical_descent') {
-    missionBriefing = `Descent phase. ${days} days remain. No margin for sustained neglect.`;
+    missionBriefing = `Core mastery phase. ${days} days remain. Keep daily retrieval consistent.`;
   } else if (phase === 'deep_ops') {
-    missionBriefing = `Core drilling phase. ${days} days remaining. Build the foundation.`;
+    missionBriefing = `Core drilling phase. ${days} days remaining. Build solid diagnostic foundations.`;
   }
 
   // Chief resident system prompt
-  let chiefResidentSystemPrompt = '';
-  if (chiefTone === 'wartime') {
-    chiefResidentSystemPrompt = `You are a wartime chief resident with ${days} days left before your student's NEET PG exam. Be terse, mission-critical, and ruthless about priorities. No encouragement unless the numbers justify it. Every word should create urgency.`;
-  } else if (chiefTone === 'urgent') {
-    chiefResidentSystemPrompt = `You are an urgent chief resident. Your student has ${days} days remaining. Be direct and demanding. Identify what must change immediately. Do not soften the feedback.`;
-  } else if (chiefTone === 'demanding') {
-    chiefResidentSystemPrompt = `You are a demanding chief resident overseeing core preparation with ${days} days remaining. Acknowledge what is working but push hard on gaps. Be analytical, not motivational.`;
-  } else {
-    chiefResidentSystemPrompt = `You are a mentoring chief resident in the early orientation phase with ${days} days remaining. Your student is building foundations. Be encouraging but precise. Focus on habits and systems.`;
-  }
+  const chiefResidentSystemPrompt = `You are an experienced, evidence-based Chief Medical Resident mentoring a postgraduate medical aspirant for their entrance exam (${days} days remaining).
+Your guiding philosophy:
+1. Long-term adherence is the goal; panic-inducing urgency is scientifically counterproductive and causes burnout.
+2. Deliberate practice and active retrieval turn errors into memory anchors.
+3. Homeostatic balance, adequate sleep, and psychological safety are essential for executive function and high-stakes recall.
+Provide encouraging, precise, and clinically sound guidance. Highlight strategic high-yield insights with calm authority.`;
 
   return {
     phase,

@@ -5,6 +5,7 @@ import { ClinicalCase, EmergencyLog, UserStats, Mission } from "../types";
 import { fallbackCases } from "../fallbackCases";
 import { sound } from "../lib/audio";
 import VitalsMonitor from "./VitalsMonitor";
+import { formatDateTimeDMY, getTodayISO } from "../lib/dateUtils";
 
 const specialtyList = [
   "Emergency Medicine / ICU",
@@ -24,7 +25,6 @@ interface TriageSessionProps {
   updateLogs: (newLogs: EmergencyLog[]) => void;
   logActivity: (prev: UserStats, acts: { cases?: number; mcqs?: number; videos?: number }) => UserStats;
   handleUpdateMissionProgress: (id: string, amount: number) => void;
-  spawnParticles: (text: string) => void;
   onExit: () => void;
 }
 
@@ -36,7 +36,6 @@ export default function TriageSession({
   updateLogs,
   logActivity,
   handleUpdateMissionProgress,
-  spawnParticles,
   onExit
 }: TriageSessionProps) {
   const [triageQueue, setTriageQueue] = useState<ClinicalCase[]>([]);
@@ -76,12 +75,11 @@ export default function TriageSession({
   }, [currentCase, revealed, vitalStatus]);
 
   const startTriageSession = async () => {
-    const today = new Date().toISOString().split("T")[0];
+    const today = getTodayISO();
     const casesPlayedToday = stats.triageCasesLogs?.[today] || 0;
     const remainingToday = Math.max(0, 5 - casesPlayedToday);
     if (remainingToday === 0) {
-       alert("Daily Limit Reached: You have reached the maximum limit of 5 clinical cases for today. Return tomorrow for your next operative shift.");
-       onExit();
+       setErrorMessage("Daily Limit Reached: You have reached the maximum limit of 5 clinical cases for today. Return tomorrow for your next operative shift.");
        return;
     }
     sound.charge();
@@ -136,7 +134,7 @@ export default function TriageSession({
   };
 
   const handlePatientFlatline = (reason: string) => {
-    sound.flatlineAlert();
+    sound.click();
     if (timerRef.current) clearInterval(timerRef.current);
     setVitalStatus("flatlined");
     setRevealed(true);
@@ -144,19 +142,46 @@ export default function TriageSession({
     if (currentCase) {
         setSessionHistory(prev => [...prev, { case: currentCase, success: false }]);
     }
+      const today = getTodayISO();
       modifyStats((prev) => {
         const performance = { ...(prev.subjectPerformance || {}) };
+        const dailyPer = { ...(prev.subjectPerformanceDaily || {}) };
+        if (!dailyPer[today]) dailyPer[today] = {};
+
         if (currentCase) {
           const sub = currentCase.specialty;
           if (!performance[sub]) performance[sub] = { total: 0, correct: 0 };
           performance[sub].total += 1;
+
+          if (!dailyPer[today][sub]) dailyPer[today][sub] = { total: 0, correct: 0 };
+          dailyPer[today][sub].total += 1;
         }
 
-        const next = logActivity({ ...prev, patientsFlatlined: prev.patientsFlatlined + 1, patientHealth: Math.max(0, prev.patientHealth - 25), shiftStreak: 0, subjectPerformance: performance }, { cases: 1 });
+        // Scientifically sound retrieval practice: an error is a potent learning anchor.
+        // Gentle -2% allostatic adjustment, streak is preserved to protect habit continuity.
+        const next = logActivity({ 
+          ...prev, 
+          patientsFlatlined: prev.patientsFlatlined + 1, 
+          patientHealth: Math.max(35, prev.patientHealth - 2), 
+          shiftStreak: prev.shiftStreak || 0, 
+          subjectPerformance: performance,
+          subjectPerformanceDaily: dailyPer
+        }, { cases: 1 });
         return next;
       });
       if (currentCase) {
-        const newLog: EmergencyLog = { id: `log-${Date.now()}`, timestamp: new Date().toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }), patientName: currentCase.patientName, specialty: currentCase.specialty, result: "FLATLINED", vignette: currentCase.clinicalVignette, userAnswer: selectedAnswer || ("-" as any), correctAnswer: currentCase.correctAnswer, pearl: currentCase.highYieldPearl };
+        const newLog: EmergencyLog = { 
+          id: `log-${Date.now()}`, 
+          timestamp: formatDateTimeDMY(new Date()), 
+          date: today,
+          patientName: currentCase.patientName, 
+          specialty: currentCase.specialty, 
+          result: "REVIEW REQUIRED", 
+          vignette: currentCase.clinicalVignette, 
+          userAnswer: selectedAnswer || ("-" as any), 
+          correctAnswer: currentCase.correctAnswer, 
+          pearl: currentCase.highYieldPearl 
+        };
         updateLogs([newLog, ...logs]);
       }
   };
@@ -169,40 +194,62 @@ export default function TriageSession({
       setVitalStatus("stabilized");
       setRevealed(true);
       setIsCritical(false);
+      const today = getTodayISO();
       const performance = { ...(stats.subjectPerformance || {}) };
+      const dailyPer = { ...(stats.subjectPerformanceDaily || {}) };
+      if (!dailyPer[today]) dailyPer[today] = {};
+
       const sub = currentCase.specialty;
       if (!performance[sub]) performance[sub] = { total: 0, correct: 0 };
       performance[sub].total += 1;
       performance[sub].correct += 1;
+
+      if (!dailyPer[today][sub]) dailyPer[today][sub] = { total: 0, correct: 0 };
+      dailyPer[today][sub].total += 1;
+      dailyPer[today][sub].correct += 1;
+
       const newStreak = stats.shiftStreak + 1;
-      const streakBonusCredits = Math.floor(newStreak / 5);
       const streakBonusXP = Math.floor(newStreak / 2) * 10;
-      const earnedCredits = 2 + streakBonusCredits;
       const earnedXP = 150 + streakBonusXP;
 
       modifyStats((prev) => {
-        const next = logActivity({ ...prev, xp: (prev.xp || 0) + earnedXP, credits: (prev.credits || 0) + earnedCredits, patientHealth: Math.min(100, prev.patientHealth + 30), patientsSaved: prev.patientsSaved + 1, shiftStreak: prev.shiftStreak + 1, unlockedPearlsCount: prev.unlockedPearlsCount + 1, subjectPerformance: performance }, { cases: 1 });
+        const next = logActivity({ 
+          ...prev, 
+          xp: (prev.xp || 0) + earnedXP, 
+          patientHealth: Math.min(100, prev.patientHealth + 6), 
+          patientsSaved: prev.patientsSaved + 1, 
+          shiftStreak: prev.shiftStreak + 1, 
+          unlockedPearlsCount: prev.unlockedPearlsCount + 1, 
+          subjectPerformance: performance,
+          subjectPerformanceDaily: dailyPer
+        }, { cases: 1 });
         return next;
       });
-      const newLog: EmergencyLog = { id: `log-${Date.now()}`, timestamp: new Date().toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }), patientName: currentCase.patientName, specialty: currentCase.specialty, result: "STABILIZED", vignette: currentCase.clinicalVignette, userAnswer: selectedAnswer, correctAnswer: currentCase.correctAnswer, pearl: currentCase.highYieldPearl };
+      const newLog: EmergencyLog = { 
+        id: `log-${Date.now()}`, 
+        timestamp: formatDateTimeDMY(new Date()), 
+        date: today,
+        patientName: currentCase.patientName, 
+        specialty: currentCase.specialty, 
+        result: "STABILIZED", 
+        vignette: currentCase.clinicalVignette, 
+        userAnswer: selectedAnswer, 
+        correctAnswer: currentCase.correctAnswer, 
+        pearl: currentCase.highYieldPearl 
+      };
       updateLogs([newLog, ...logs]);
       setSessionHistory(prev => [...prev, { case: currentCase, success: true }]);
       const mcqM = missions.find(m => m.category === "MCQ");
       if (mcqM && mcqM.status === "Pending") {
         handleUpdateMissionProgress(mcqM.id, 1);
       }
-      spawnParticles("STABILIZED (+30%)");
-      spawnParticles(`+${earnedXP} XP / +${earnedCredits} CRDT`);
-      if (streakBonusCredits > 0 || streakBonusXP > 0) {
-        setTimeout(() => spawnParticles(`STREAK BONUS!`), 600);
-      }
     } else {
-      sound.flatlineAlert();
+      sound.gentleInsight();
       if (attempts === 0) {
         setAttempts(1);
-        setIsCritical(true);
+        setIsCritical(false);
       } else {
-        handlePatientFlatline("Incorrect medical judgment. Case flatlined.");
+        handlePatientFlatline("Diagnostic review logged. Clinical pearl revealed.");
       }
     }
   };
@@ -222,7 +269,7 @@ export default function TriageSession({
       dismissPatient();
       setIsFetchingSuggestions(true);
       
-      const today = new Date().toISOString().split("T")[0];
+      const today = getTodayISO();
       const casesPlayedToday = stats.triageCasesLogs?.[today] || 0;
       
       if (casesPlayedToday >= 5) {
@@ -371,6 +418,20 @@ export default function TriageSession({
             )}
           </div>
 
+          {/* Bedside Telemetry & Integrated Reserve Monitor */}
+          <div className="mb-8">
+            <VitalsMonitor
+              vitals={currentCase.initialVitals || { hr: 96, bp: "130/85", spo2: 97, temp: 98.6 }}
+              status={vitalStatus}
+              isCritical={isCritical}
+              patientHealth={stats.patientHealth}
+              burnoutIndex={stats.burnoutIndex}
+              studyMode={stats.studyMode}
+              todaySleepHours={stats.sleepLogs?.[getTodayISO()] || 0}
+              shiftStreak={stats.shiftStreak || 0}
+            />
+          </div>
+
           <div className="text-slate-700 dark:text-slate-300 text-base font-medium leading-relaxed mb-10 bg-slate-50 dark:bg-slate-950/50 p-6 rounded-2xl border border-slate-200 dark:border-slate-800">
             {currentCase.clinicalVignette}
           </div>
@@ -382,11 +443,11 @@ export default function TriageSession({
               let optionStyle = "border-white/60 bg-white dark:bg-slate-900/60 backdrop-blur-md hover:border-blue-300 hover:bg-white dark:bg-slate-900/80 text-slate-700 dark:text-slate-300";
               
               if (revealed) {
-                if (isCorrect) optionStyle = "border-emerald-500 bg-emerald-50 text-emerald-800 shadow-sm border-2";
-                else if (isSelected) optionStyle = "border-red-300 bg-red-50 text-red-800";
+                if (isCorrect) optionStyle = "border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 shadow-sm border-2";
+                else if (isSelected) optionStyle = "border-amber-300 dark:border-amber-800 bg-amber-50/70 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200 border-2";
                 else optionStyle = "border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/50 text-slate-400 opacity-60";
               } else if (isSelected) {
-                optionStyle = "border-blue-500 bg-blue-50 text-blue-900 border-2 shadow-sm";
+                optionStyle = "border-blue-500 bg-blue-50 dark:bg-blue-950/40 text-blue-900 dark:text-blue-200 border-2 shadow-sm";
               }
 
               return (
@@ -396,7 +457,7 @@ export default function TriageSession({
                   disabled={revealed}
                   className={`p-5 rounded-2xl border text-left transition-all flex gap-4 disabled:cursor-default font-medium ${optionStyle}`}
                 >
-                  <span className={`font-bold shrink-0 w-6 text-center ${revealed && isCorrect ? 'text-emerald-600' : isSelected && !revealed ? 'text-blue-600' : 'text-slate-400'}`}>{key}.</span>
+                  <span className={`font-bold shrink-0 w-6 text-center ${revealed && isCorrect ? 'text-emerald-600 dark:text-emerald-400' : isSelected && !revealed ? 'text-blue-600 dark:text-blue-400' : 'text-slate-400'}`}>{key}.</span>
                   <span className="leading-snug">{text}</span>
                 </motion.button>
               );
@@ -415,17 +476,17 @@ export default function TriageSession({
             </div>
           ) : (
             <div className="mt-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className={`p-6 rounded-3xl border flex flex-col gap-4 shadow-sm ${vitalStatus === 'stabilized' ? 'border-emerald-200 bg-emerald-50/50' : 'border-red-200 bg-red-50/50'}`}>
+              <div className={`p-6 rounded-3xl border flex flex-col gap-4 shadow-sm ${vitalStatus === 'stabilized' ? 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/50 dark:bg-slate-900/80' : 'border-indigo-200 bg-indigo-50/40 dark:border-indigo-900/40 dark:bg-slate-900/80'}`}>
                 <div className="flex items-center gap-4">
-                  <div className={`p-3 rounded-full ${vitalStatus === 'stabilized' ? 'bg-emerald-100 text-emerald-600' : 'bg-red-100 text-red-600'}`}>
+                  <div className={`p-3 rounded-full ${vitalStatus === 'stabilized' ? 'bg-emerald-100 text-emerald-600 dark:bg-emerald-950/80 dark:text-emerald-400' : 'bg-indigo-100 text-indigo-600 dark:bg-indigo-950/80 dark:text-indigo-400'}`}>
                     {vitalStatus === 'stabilized' ? <Check className="w-6 h-6" /> : <Activity className="w-6 h-6" />}
                   </div>
                   <div>
-                    <h5 className={`text-xl font-bold tracking-tight ${vitalStatus === 'stabilized' ? 'text-emerald-700' : 'text-red-700'}`}>
-                      {vitalStatus === 'stabilized' ? 'Patient Stabilized Successfully' : 'Patient Flatlined'}
+                    <h5 className={`text-xl font-bold tracking-tight ${vitalStatus === 'stabilized' ? 'text-emerald-700 dark:text-emerald-300' : 'text-indigo-900 dark:text-indigo-200'}`}>
+                      {vitalStatus === 'stabilized' ? 'Diagnosis Verified • Clinical Case Cleared' : 'Diagnostic Pivot • Retrieval Learning Case'}
                     </h5>
-                    <p className={`text-sm font-bold ${vitalStatus === 'stabilized' ? 'text-emerald-600/80' : 'text-red-600/80'}`}>
-                      {vitalStatus === 'stabilized' ? '+150 XP & CRDT / +30% PREP HEALTH EARNED' : 'CRITICAL HEALTH PENALTY APPLIED'}
+                    <p className={`text-sm font-bold ${vitalStatus === 'stabilized' ? 'text-emerald-600/80 dark:text-emerald-400' : 'text-indigo-600 dark:text-indigo-400'}`}>
+                      {vitalStatus === 'stabilized' ? '+150 XP & CRDT • +6% PREP STABILITY' : 'HIGH-YIELD INSIGHT UNLOCKED • GENTLE -2% PACING ADJUSTMENT'}
                     </p>
                   </div>
                 </div>
@@ -435,9 +496,9 @@ export default function TriageSession({
                     {currentCase.explanation}
                   </div>
                 )}
-                <div className="text-blue-800 text-sm font-medium mt-2 flex items-start gap-3 bg-blue-50/80 p-5 rounded-2xl border border-blue-100 shadow-sm">
+                <div className="text-blue-800 dark:text-blue-300 text-sm font-medium mt-2 flex items-start gap-3 bg-blue-50/80 dark:bg-blue-950/40 p-5 rounded-2xl border border-blue-100 dark:border-blue-900 shadow-sm">
                   <Lightbulb className="w-5 h-5 shrink-0 text-blue-500" />
-                  <p><span className="font-bold block mb-1 tracking-wide uppercase text-xs text-blue-600">High-Yield Pearl Unlocked</span> {currentCase.highYieldPearl}</p>
+                  <p><span className="font-bold block mb-1 tracking-wide uppercase text-xs text-blue-600 dark:text-blue-400">High-Yield Pearl Unlocked</span> {currentCase.highYieldPearl}</p>
                 </div>
               </div>
               <div className="mt-8 flex justify-end gap-3">
@@ -446,7 +507,7 @@ export default function TriageSession({
                     onClick={advanceToNextPatient}
                     className="px-8 py-4 bg-blue-600 hover:bg-blue-500 text-white font-bold rounded-2xl shadow-lg shadow-blue-600/20 transition-all text-sm tracking-wide uppercase flex items-center justify-center gap-2"
                   >
-                    Next Emergency <ChevronRight className="w-5 h-5" />
+                    Next Clinical Case <ChevronRight className="w-5 h-5" />
                   </motion.button>
                 ) : (
                   <motion.button whileTap={{ scale: 0.95 }}
@@ -469,7 +530,7 @@ export default function TriageSession({
           </div>
           <h4 className="text-xl font-bold text-slate-800 dark:text-slate-200">Triage Bay Empty</h4>
           <p className="text-sm text-slate-500 font-medium max-w-md mt-3">
-            Admit a new emergency case to test your diagnostics. Success heavily restores patient stability and yields major XP and Credits.
+            Admit a new emergency case to test your diagnostics. Success heavily restores patient stability and yields major XP and diagnostic pearls.
           </p>
         </div>
       )}

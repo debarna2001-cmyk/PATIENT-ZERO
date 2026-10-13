@@ -81,6 +81,11 @@ service cloud.firestore {
          allow read: if isOwner(userId);
          allow write: if isOwner(userId);
       }
+
+      match /mission_history/{docId} {
+         allow read: if isOwner(userId);
+         allow write: if isOwner(userId);
+      }
     }
   }
 }

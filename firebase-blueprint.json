@@ -17,7 +17,11 @@
         "patientsFlatlined": { "type": "number" },
         "unlockedPearlsCount": { "type": "number" },
         "xp": { "type": "number" },
-        "credits": { "type": "number" }
+        "credits": { "type": "number" },
+        "streakShields": { "type": "number" },
+        "customMilestones": { "type": "array" },
+        "redeemedRewards": { "type": "array" },
+        "restorativeHistory": { "type": "array" }
       },
       "required": ["studentName", "targetSpecialty", "targetExamYear", "daysToExam", "patientHealth", "burnoutIndex", "isStabilizing", "shiftStreak", "patientsSaved", "patientsFlatlined", "unlockedPearlsCount", "xp", "credits"]
     },
@@ -28,6 +32,19 @@
        "properties": {
            "missionsTarget": { "type": "string" }
        }
+    },
+    "DailyMissionRecord": {
+      "title": "DailyMissionRecord",
+      "description": "Historical log of daily mission completion",
+      "type": "object",
+      "properties": {
+        "date": { "type": "string" },
+        "completedCount": { "type": "number" },
+        "totalCount": { "type": "number" },
+        "completedRate": { "type": "number" },
+        "archivedAt": { "type": "string" }
+      },
+      "required": ["date", "completedCount", "totalCount", "completedRate", "archivedAt"]
     }
   },
   "firestore": {
@@ -38,6 +55,10 @@
     "users/{userId}/missions/{missionId}": {
        "schema": { "$ref": "#/entities/UserMissions" },
        "description": "Missions list"
+    },
+    "users/{userId}/mission_history/{historyId}": {
+      "schema": { "$ref": "#/entities/DailyMissionRecord" },
+      "description": "Historical archive of daily mission completion"
     }
   }
 }

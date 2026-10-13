@@ -34,10 +34,30 @@ export interface Mission {
   current: number;
   unit: string; // e.g., "Questions", "Hours", "Topics"
   xpReward: number;
-  creditReward: number;
+  creditReward?: number;
   stabilizeValue: number; // how much patient health is healed
   status: 'Pending' | 'Completed';
   period?: 'daily' | 'weekly';
+}
+
+export interface DailyMissionRecord {
+  date: string; // YYYY-MM-DD
+  completedCount: number;
+  totalCount: number;
+  completedRate: number; // 0-100 percentage
+  status?: 'Target Cleared' | 'Partially Met' | 'Goals Not Met' | 'Shift Missed';
+  note?: string;
+  missions: {
+    id: string;
+    title: string;
+    category: string;
+    target: number;
+    current: number;
+    unit: string;
+    status: 'Pending' | 'Completed';
+    period?: 'daily' | 'weekly';
+  }[];
+  archivedAt: string;
 }
 
 export interface Achievement {
@@ -55,7 +75,10 @@ export interface UserStats {
   targetExamYear: number;
   targetExamDate?: string; // YYYY-MM-DD
   daysToExam: number;
+  createdAt?: string; // ISO string when user profile was created
+  firstActiveDate?: string; // YYYY-MM-DD date when student commenced simulation
   lastMissionResetDate?: string;
+  lastEvaluatedPerformanceDate?: string; // Track when daily performance penalties/rewards were processed
   
   // Game states representing "The Patient" (user's NEET PG study level)
   patientHealth: number; // 0 to 100
@@ -68,26 +91,41 @@ export interface UserStats {
   patientsFlatlined: number;
   unlockedPearlsCount: number;
   xp: number; // Experience points
-  credits: number; // Currencies earned to redeem real-life rewards
+  credits?: number; // Legacy credits (removed from UI)
   subjectPerformance: Record<string, { total: number; correct: number }>;
+  subjectPerformanceDaily?: Record<string, Record<string, { total: number; correct: number }>>; // yyyy-mm-dd -> Specialty -> { total, correct }
   activityLogs: Record<string, number>; // yyyy-mm-dd -> activity count for heatmap
   triageCasesLogs?: Record<string, number>; // yyyy-mm-dd -> number of triage cases completed
   sleepLogs: Record<string, number>; // yyyy-mm-dd -> hours slept
   mcqLogs?: Record<string, number>; // yyyy-mm-dd -> MCQs solved count
   videoLogs?: Record<string, number>; // yyyy-mm-dd -> videos watched count
+  timeZone?: string; // e.g. 'Asia/Kolkata'
+  lastActiveTimestamp?: number; // epoch ms for tab focus elapsed decay calculation
   
   studyMode?: 'Normal' | 'Duty' | 'Rest';
   currentWeekStart?: string;
   dutyDaysUsed?: number;
   restDaysUsed?: number;
+  
+  // Cloud-synced restorative & safeguards state
+  streakShields?: number;
+  restorativeHistory?: {
+    id: string;
+    protocolId: string;
+    protocolName: string;
+    durationMinutes: number;
+    completedAt: string;
+    burnoutReduction: number;
+  }[];
 }
 
 export interface EmergencyLog {
   id: string;
   timestamp: string;
+  date?: string; // yyyy-mm-dd
   patientName: string;
   specialty: string;
-  result: 'STABILIZED' | 'FLATLINED';
+  result: 'STABILIZED' | 'FLATLINED' | 'REVIEW REQUIRED';
   vignette: string;
   userAnswer: 'A' | 'B' | 'C' | 'D';
   correctAnswer: 'A' | 'B' | 'C' | 'D';
@@ -99,18 +137,4 @@ export interface MoodLog {
   ratingValue: number; // 1 to 5 representing mental state
   burnoutObserved: boolean;
   procrastinationTrigger: string;
-}
-
-export interface RewardItem {
-  id: string;
-  title: string;
-  cost: number;
-  icon: string; // lucide icon name or emoji
-}
-
-export interface RedeemedReward {
-  id: string;
-  rewardId: string;
-  timestamp: string;
-  title: string;
 }

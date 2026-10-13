@@ -1,26 +1,29 @@
 import { sound } from "../lib/audio";
 import { motion } from "motion/react";
-import { UserStats, EmergencyLog } from "../types";
-import { Crosshair, HelpCircle, Award, Target, AlertOctagon, HeartPulse, Zap, Bot, Loader2, Sparkles, BookOpen } from "lucide-react";
+import { UserStats, EmergencyLog, MoodLog } from "../types";
+import { Crosshair, HelpCircle, Award, Target, AlertOctagon, HeartPulse, Zap, Bot, Loader2, Sparkles, BookOpen, TrendingUp, TrendingDown, Clock, Activity, Calendar, Brain, BatteryCharging, Coffee, ShieldAlert, ShieldCheck, Star, Crown, Medal, Trophy, Flame, Lock } from "lucide-react";
 import { useState } from "react";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
+import { formatDateDMY, getDaysAgoISO, getTodayISO } from "../lib/dateUtils";
 
 interface Props {
   stats: UserStats;
   logs: EmergencyLog[];
+  moodLogs?: MoodLog[];
 }
 
-// Generate clinical ranks
-const RANKS = [
-  { rank: "Intern", minXp: 0, title: "Level 1: Novice Observer" },
-  { rank: "Junior Resident", minXp: 500, title: "Level 2: Ward Responder" },
-  { rank: "Senior Resident", minXp: 1500, title: "Level 3: ICU Controller" },
-  { rank: "Chief Resident", minXp: 3000, title: "Level 4: Dept Commander" },
-  { rank: "Attending", minXp: 6000, title: "Level 5: Master Diagnostician" }
+// Clinical ranks calibrated for the full 8-14 month residency preparation marathon
+export const RANKS = [
+  { rank: "Intern", minXp: 0, title: "Level 1: Novice Observer (Orientation)" },
+  { rank: "Junior Resident", minXp: 20000, title: "Level 2: Ward Responder (Months 2-3)" },
+  { rank: "Senior Resident", minXp: 60000, title: "Level 3: ICU Controller (Months 4-6)" },
+  { rank: "Chief Resident", minXp: 120000, title: "Level 4: Dept Commander (Months 7-9)" },
+  { rank: "Clinical Fellow", minXp: 190000, title: "Level 5: Specialty Fellow (Months 10-11)" },
+  { rank: "Master Attending", minXp: 280000, title: "Level 6: Board Consultant (Months 12-14)" }
 ];
 
-
-export default function ProgressPanel({ stats, logs }: Props) {
+export default function ProgressPanel({ stats, logs, moodLogs = [] }: Props) {
+  const [accuracyWindow, setAccuracyWindow] = useState<'dual' | 'rolling' | 'lifetime'>('dual');
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewData, setReviewData] = useState<{ title: string; content: string; actionableAdvice: string[] } | null>(null);
 
@@ -56,30 +59,160 @@ export default function ProgressPanel({ stats, logs }: Props) {
     pctToNextRank = (xpIntoRank / xpNeeded) * 100;
   }
 
-  // Subject Mastery Data
-  const subjectPerformanceArray = Object.entries(stats.subjectPerformance || {}).map(([subject, data]) => {
+  // Biocompatibility & Procrastination Analytics
+  const validMoods = moodLogs || [];
+  const avgResilience = validMoods.length > 0 
+    ? (validMoods.reduce((acc, m) => acc + (m.ratingValue || 3), 0) / validMoods.length).toFixed(1)
+    : "3.0";
+  
+  const triggerMap: Record<string, number> = {};
+  validMoods.forEach(m => {
+    const raw = (m.procrastinationTrigger || "").trim();
+    if (raw) {
+      let category = raw;
+      const lower = raw.toLowerCase();
+      if (lower.includes("instagram") || lower.includes("reels") || lower.includes("social") || lower.includes("twitter") || lower.includes("x.com") || lower.includes("reddit")) {
+        category = "Social Media / Doomscrolling";
+      } else if (lower.includes("youtube") || lower.includes("video") || lower.includes("netflix") || lower.includes("movie") || lower.includes("anime")) {
+        category = "Video Streaming / YouTube";
+      } else if (lower.includes("sleep") || lower.includes("tired") || lower.includes("fatigue") || lower.includes("exhaust")) {
+        category = "Fatigue Paralysis";
+      } else if (lower.includes("game") || lower.includes("gaming") || lower.includes("chess")) {
+        category = "Gaming";
+      } else if (lower.includes("overthink") || lower.includes("anxious") || lower.includes("stress")) {
+        category = "Anxiety & Overthinking";
+      }
+      triggerMap[category] = (triggerMap[category] || 0) + 1;
+    }
+  });
+
+  const topTriggers = Object.entries(triggerMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+
+  const totalProcrastinationEvents = validMoods.filter(m => Boolean(m.procrastinationTrigger?.trim())).length;
+
+  const calculateStudyStreak = (logs: Record<string, number> = {}) => {
+    const dates = Object.keys(logs).sort((a,b) => b.localeCompare(a));
+    if (!dates.length) return 0;
+    
+    let streak = 0;
+    let currentDate = new Date();
+    currentDate.setHours(0,0,0,0);
+    
+    let firstDateStr = dates[0];
+    let firstDate = new Date(firstDateStr);
+    firstDate.setHours(0,0,0,0);
+    
+    let diffDays = Math.round((currentDate.getTime() - firstDate.getTime()) / (1000 * 3600 * 24));
+    if (diffDays > 1) return 0;
+
+    for (const d of dates) {
+      const logDate = new Date(d);
+      logDate.setHours(0,0,0,0);
+      const diff = Math.round((currentDate.getTime() - logDate.getTime()) / (1000 * 3600 * 24));
+      
+      if (diff === 0) {
+        if (streak === 0) streak = 1;
+      } else if (diff === 1) {
+        streak++;
+        currentDate = logDate;
+      } else {
+        break;
+      }
+    }
+    return streak;
+  };
+  
+  const dailyStreak = calculateStudyStreak(stats.activityLogs);
+
+  // 30-Day Rolling Window and Lifetime Accuracy Calculations
+  const thirtyDaysAgoStr = getDaysAgoISO(30);
+
+  const rollingPerformance: Record<string, { total: number; correct: number }> = {};
+
+  // 1. Incorporate from stats.subjectPerformanceDaily (where date >= 30 days ago)
+  if (stats.subjectPerformanceDaily) {
+    Object.entries(stats.subjectPerformanceDaily).forEach(([dateKey, dayData]) => {
+      if (dateKey >= thirtyDaysAgoStr) {
+        Object.entries(dayData).forEach(([subject, perf]) => {
+          if (!rollingPerformance[subject]) rollingPerformance[subject] = { total: 0, correct: 0 };
+          rollingPerformance[subject].total += perf.total;
+          rollingPerformance[subject].correct += perf.correct;
+        });
+      }
+    });
+  }
+
+  // 2. Incorporate from logs (EmergencyLog[]) from the past 30 days
+  logs.forEach(log => {
+    let logDateStr = log.date;
+    if (!logDateStr && log.id && log.id.startsWith("log-")) {
+      const epoch = parseInt(log.id.replace("log-", ""), 10);
+      if (!isNaN(epoch) && epoch > 0) {
+        logDateStr = new Date(epoch).toISOString().split("T")[0];
+      }
+    }
+    if (logDateStr && logDateStr >= thirtyDaysAgoStr && log.specialty) {
+      if (!stats.subjectPerformanceDaily || !stats.subjectPerformanceDaily[logDateStr]) {
+        if (!rollingPerformance[log.specialty]) rollingPerformance[log.specialty] = { total: 0, correct: 0 };
+        rollingPerformance[log.specialty].total += 1;
+        if (log.result === "STABILIZED") {
+          rollingPerformance[log.specialty].correct += 1;
+        }
+      }
+    }
+  });
+
+  const allSpecialties = Array.from(new Set([
+    ...Object.keys(stats.subjectPerformance || {}),
+    ...Object.keys(rollingPerformance)
+  ])).sort();
+
+  const comparisonData = allSpecialties.map(sub => {
+    const lifetime = stats.subjectPerformance?.[sub] || { total: 0, correct: 0 };
+    const rolling = rollingPerformance[sub] || { total: 0, correct: 0 };
+
+    const lifetimeAcc = lifetime.total > 0 ? Math.round((lifetime.correct / lifetime.total) * 100) : 0;
+    const rollingAcc = rolling.total > 0 ? Math.round((rolling.correct / rolling.total) * 100) : 0;
+    const delta = rolling.total > 0 && lifetime.total > 0 ? rollingAcc - lifetimeAcc : 0;
+
     return {
-      subject: subject.split(" ")[0], // abbreviate
-      accuracy: data.total > 0 ? Math.floor((data.correct / data.total) * 100) : 0,
-      total: data.total,
+      subject: sub.split(" ")[0].slice(0, 8),
+      fullSubject: sub,
+      lifetimeAccuracy: lifetimeAcc,
+      lifetimeTotal: lifetime.total,
+      rollingAccuracy: rollingAcc,
+      rollingTotal: rolling.total,
+      hasRolling: rolling.total > 0,
+      delta
     };
   });
 
   const fallbackSubjectData = [
-    { subject: 'Cardio', accuracy: 0, total: 0 },
-    { subject: 'Neuro', accuracy: 0, total: 0 },
-    { subject: 'Surg', accuracy: 0, total: 0 },
-    { subject: 'Pharm', accuracy: 0, total: 0 },
+    { subject: 'Cardio', fullSubject: 'Cardiology', lifetimeAccuracy: 0, lifetimeTotal: 0, rollingAccuracy: 0, rollingTotal: 0, hasRolling: false, delta: 0 },
+    { subject: 'Neuro', fullSubject: 'Neurology', lifetimeAccuracy: 0, lifetimeTotal: 0, rollingAccuracy: 0, rollingTotal: 0, hasRolling: false, delta: 0 },
+    { subject: 'Surg', fullSubject: 'General Surgery', lifetimeAccuracy: 0, lifetimeTotal: 0, rollingAccuracy: 0, rollingTotal: 0, hasRolling: false, delta: 0 },
+    { subject: 'Pharm', fullSubject: 'Pharmacology', lifetimeAccuracy: 0, lifetimeTotal: 0, rollingAccuracy: 0, rollingTotal: 0, hasRolling: false, delta: 0 },
   ];
 
-  const subjectChartData = subjectPerformanceArray.length > 0 ? subjectPerformanceArray : fallbackSubjectData;
+  const subjectChartData = comparisonData.length > 0 ? comparisonData : fallbackSubjectData;
+
+  const totalLifetimeAttempts = Object.values(stats.subjectPerformance || {}).reduce((acc, curr) => acc + curr.total, 0);
+  const totalLifetimeCorrect = Object.values(stats.subjectPerformance || {}).reduce((acc, curr) => acc + curr.correct, 0);
+  const lifetimeOverallAcc = totalLifetimeAttempts > 0 ? Math.round((totalLifetimeCorrect / totalLifetimeAttempts) * 100) : 0;
+
+  const totalRollingAttempts = Object.values(rollingPerformance).reduce((acc, curr) => acc + curr.total, 0);
+  const totalRollingCorrect = Object.values(rollingPerformance).reduce((acc, curr) => acc + curr.correct, 0);
+  const rollingOverallAcc = totalRollingAttempts > 0 ? Math.round((totalRollingCorrect / totalRollingAttempts) * 100) : 0;
+  const overallDelta = totalRollingAttempts > 0 && totalLifetimeAttempts > 0 ? rollingOverallAcc - lifetimeOverallAcc : 0;
 
   const timelineData = [];
   for (let i = 6; i >= 0; i--) {
-    const d = new Date();
-    d.setDate(d.getDate() - i);
-    const dateStr = d.toISOString().split("T")[0];
-    const dayName = d.toLocaleDateString("en-US", { weekday: "short" });
+    const dateStr = getDaysAgoISO(i);
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const dt = new Date(y, m - 1, d);
+    const dayName = dt.toLocaleDateString("en-US", { weekday: "short" });
     timelineData.push({
       day: dayName,
       cases: (stats.triageCasesLogs && stats.triageCasesLogs[dateStr]) || 0,
@@ -152,7 +285,7 @@ export default function ProgressPanel({ stats, logs }: Props) {
               <Zap className="w-7 h-7" />
             </div>
             <div className="flex items-baseline">
-              <span className="text-4xl font-black tracking-tight text-orange-500">{stats.shiftStreak}</span>
+              <span className="text-4xl font-black tracking-tight text-orange-500">{dailyStreak}</span>
               <span className="text-sm font-bold text-slate-500 ml-2 uppercase tracking-wide">Days</span>
             </div>
           </div>
@@ -162,34 +295,216 @@ export default function ProgressPanel({ stats, logs }: Props) {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Specialty Analytics Chart */}
-        <div className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm">
-          <h3 className="font-bold text-slate-900 dark:text-slate-100 text-lg mb-6 flex items-center gap-2 tracking-tight">
-            <Crosshair className="w-5 h-5 text-blue-500" />
-            Subject Mastery & Engagement
-          </h3>
-          <div className="h-64 w-full flex items-center justify-center">
-            {subjectPerformanceArray.length === 0 ? (
-              <div className="text-center text-slate-500 bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800 p-6 rounded-2xl w-full">
-                <HelpCircle className="w-8 h-8 text-slate-300 dark:text-slate-700 mx-auto mb-2" />
-                <p className="font-medium text-sm">Insufficient clinical data.<br/>Manually log sessions to build accuracy radar.</p>
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={subjectChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <XAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 11, fontWeight: 700 }} />
-                  <YAxis yAxisId="left" stroke="#3b82f6" orientation="left" domain={[0, 100]} tick={{ fontSize: 11 }} />
-                  <YAxis yAxisId="right" stroke="#10b981" orientation="right" tick={{ fontSize: 11 }} />
-                  <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '12px', color: '#fff', fontSize: '12px', fontWeight: 600 }} />
-                  <Bar yAxisId="left" dataKey="accuracy" name="Accuracy %" fill="#3b82f6" radius={[4, 4, 0, 0]} />
-                  <Bar yAxisId="right" dataKey="total" name="Total Interventions" fill="#10b981" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            )}
+      {/* 30-Day Rolling Accuracy Window & Lifetime Mastery Section */}
+      <div className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 border-b border-slate-100 dark:border-slate-800/80 pb-5">
+          <div>
+            <h3 className="font-bold text-slate-900 dark:text-slate-100 text-lg flex items-center gap-2 tracking-tight">
+              <Crosshair className="w-5 h-5 text-indigo-500" />
+              Subject Mastery & 30-Day Rolling Accuracy
+            </h3>
+            <p className="text-xs text-slate-500 font-medium mt-1">
+              Evaluates recent 30-day cognitive retention alongside historical lifetime track records.
+            </p>
+          </div>
+
+          {/* View toggle controls */}
+          <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl self-start md:self-auto border border-slate-200/60 dark:border-slate-700/60 text-xs font-bold">
+            <button
+              onClick={() => { sound.click(); setAccuracyWindow('dual'); }}
+              className={`px-3 py-1.5 rounded-lg transition uppercase tracking-wider ${
+                accuracyWindow === 'dual'
+                  ? 'bg-white dark:bg-slate-700 text-indigo-600 dark:text-indigo-300 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              Dual Comparison
+            </button>
+            <button
+              onClick={() => { sound.click(); setAccuracyWindow('rolling'); }}
+              className={`px-3 py-1.5 rounded-lg transition uppercase tracking-wider ${
+                accuracyWindow === 'rolling'
+                  ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-300 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              30-Day Rolling
+            </button>
+            <button
+              onClick={() => { sound.click(); setAccuracyWindow('lifetime'); }}
+              className={`px-3 py-1.5 rounded-lg transition uppercase tracking-wider ${
+                accuracyWindow === 'lifetime'
+                  ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-300 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+              }`}
+            >
+              Lifetime Only
+            </button>
           </div>
         </div>
 
+        {/* Aggregate KPI Summary Strip */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+          <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 flex flex-col justify-between">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Lifetime Mastery Rate</span>
+            <div className="flex items-baseline gap-2 mt-2">
+              <span className="text-3xl font-black text-indigo-600 dark:text-indigo-400">{lifetimeOverallAcc}%</span>
+              <span className="text-xs text-slate-500 font-semibold">({totalLifetimeAttempts} total attempts)</span>
+            </div>
+            <div className="text-[11px] text-slate-400 font-medium mt-1">Cumulative career diagnostic accuracy</div>
+          </div>
+
+          <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 flex flex-col justify-between">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">30-Day Rolling Window</span>
+            <div className="flex items-baseline gap-2 mt-2">
+              <span className="text-3xl font-black text-emerald-600 dark:text-emerald-400">{rollingOverallAcc}%</span>
+              <span className="text-xs text-slate-500 font-semibold">({totalRollingAttempts} recent cases)</span>
+            </div>
+            <div className="text-[11px] text-slate-400 font-medium mt-1">
+              Window: <span className="text-emerald-500 font-mono font-bold">{formatDateDMY(thirtyDaysAgoStr)}</span> to <span className="text-emerald-500 font-mono font-bold">{formatDateDMY(getTodayISO())}</span>
+            </div>
+          </div>
+
+          <div className="bg-slate-50 dark:bg-slate-800/50 border border-slate-100 dark:border-slate-800 rounded-2xl p-4 flex flex-col justify-between">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Momentum / Velocity Δ</span>
+            <div className="flex items-baseline gap-2 mt-2">
+              <span className={`text-3xl font-black flex items-center gap-1 ${
+                overallDelta > 0 ? 'text-emerald-500' : overallDelta < 0 ? 'text-rose-500' : 'text-slate-400'
+              }`}>
+                {overallDelta > 0 ? `+${overallDelta}%` : `${overallDelta}%`}
+              </span>
+              <span className="text-xs text-slate-500 font-semibold">
+                {overallDelta > 0 ? (
+                  <span className="text-emerald-500 font-bold flex items-center"><TrendingUp className="w-3.5 h-3.5 mr-0.5 inline" /> Improving</span>
+                ) : overallDelta < 0 ? (
+                  <span className="text-rose-500 font-bold flex items-center"><TrendingDown className="w-3.5 h-3.5 mr-0.5 inline" /> Cognitive Slip</span>
+                ) : (
+                  <span>Consistent</span>
+                )}
+              </span>
+            </div>
+            <div className="text-[11px] text-slate-400 font-medium mt-1">Net shift vs lifetime baseline</div>
+          </div>
+        </div>
+
+        {/* Visual Chart */}
+        <div className="h-72 w-full flex items-center justify-center mb-6">
+          {comparisonData.length === 0 ? (
+            <div className="text-center text-slate-500 bg-slate-50 dark:bg-slate-950/50 border border-slate-100 dark:border-slate-800 p-8 rounded-2xl w-full">
+              <HelpCircle className="w-8 h-8 text-slate-300 dark:text-slate-700 mx-auto mb-2" />
+              <p className="font-medium text-sm">Insufficient clinical data.<br/>Run triage shifts or log MCQs to populate the 30-day rolling accuracy window.</p>
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={subjectChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <XAxis dataKey="subject" tick={{ fill: '#64748b', fontSize: 11, fontWeight: 700 }} />
+                <YAxis yAxisId="left" stroke="#6366f1" orientation="left" domain={[0, 100]} tick={{ fontSize: 11 }} />
+                <YAxis yAxisId="right" stroke="#10b981" orientation="right" tick={{ fontSize: 11 }} />
+                <Tooltip
+                  content={({ active, payload }) => {
+                    if (active && payload && payload.length) {
+                      const data = payload[0].payload;
+                      return (
+                        <div className="bg-slate-900 text-white p-3 rounded-xl border border-slate-700 shadow-xl text-xs space-y-1">
+                          <p className="font-bold text-sm text-indigo-300">{data.fullSubject}</p>
+                          <div className="flex justify-between gap-4 text-slate-300">
+                            <span>Lifetime Mastery:</span>
+                            <span className="font-bold text-white">{data.lifetimeAccuracy}% ({data.lifetimeTotal} cases)</span>
+                          </div>
+                          <div className="flex justify-between gap-4 text-emerald-300">
+                            <span>30-Day Rolling:</span>
+                            <span className="font-bold text-emerald-400">{data.hasRolling ? `${data.rollingAccuracy}% (${data.rollingTotal} cases)` : 'No recent data'}</span>
+                          </div>
+                          {data.hasRolling && data.lifetimeTotal > 0 && (
+                            <div className="flex justify-between gap-4 pt-1 border-t border-slate-800 text-[11px]">
+                              <span>Momentum Δ:</span>
+                              <span className={`font-bold ${data.delta >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                {data.delta > 0 ? `+${data.delta}%` : `${data.delta}%`}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+                    return null;
+                  }}
+                />
+                {accuracyWindow === 'dual' && (
+                  <>
+                    <Bar yAxisId="left" dataKey="lifetimeAccuracy" name="Lifetime %" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                    <Bar yAxisId="left" dataKey="rollingAccuracy" name="30-Day Rolling %" fill="#10b981" radius={[4, 4, 0, 0]} />
+                  </>
+                )}
+                {accuracyWindow === 'rolling' && (
+                  <>
+                    <Bar yAxisId="left" dataKey="rollingAccuracy" name="30-Day Accuracy %" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    <Bar yAxisId="right" dataKey="rollingTotal" name="30-Day Cases" fill="#0284c7" radius={[4, 4, 0, 0]} />
+                  </>
+                )}
+                {accuracyWindow === 'lifetime' && (
+                  <>
+                    <Bar yAxisId="left" dataKey="lifetimeAccuracy" name="Lifetime %" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                    <Bar yAxisId="right" dataKey="lifetimeTotal" name="Lifetime Total Cases" fill="#0284c7" radius={[4, 4, 0, 0]} />
+                  </>
+                )}
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Detailed Per-Specialty Breakdown Cards */}
+        {comparisonData.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 border-t border-slate-100 dark:border-slate-800/80 pt-5">
+            {comparisonData.map((item, idx) => (
+              <div key={idx} className="bg-slate-50/60 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800 p-3.5 rounded-2xl flex flex-col justify-between">
+                <div className="flex justify-between items-center mb-2">
+                  <span className="font-bold text-xs text-slate-800 dark:text-slate-200 tracking-tight">{item.fullSubject}</span>
+                  {item.hasRolling ? (
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-md flex items-center gap-1 ${
+                      item.delta > 0
+                        ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400'
+                        : item.delta < 0
+                        ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                    }`}>
+                      {item.delta > 0 ? <TrendingUp className="w-3 h-3" /> : item.delta < 0 ? <TrendingDown className="w-3 h-3" /> : null}
+                      {item.delta > 0 ? `+${item.delta}%` : `${item.delta}%`}
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider bg-slate-100 dark:bg-slate-800/60 px-2 py-0.5 rounded-md">
+                      Lifetime Only
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-1.5 text-[11px]">
+                  <div>
+                    <div className="flex justify-between text-slate-500 font-medium mb-0.5">
+                      <span>Lifetime</span>
+                      <span className="font-bold text-slate-700 dark:text-slate-300">{item.lifetimeAccuracy}% ({item.lifetimeTotal})</span>
+                    </div>
+                    <div className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                      <div className="h-full bg-indigo-500 rounded-full" style={{ width: `${item.lifetimeAccuracy}%` }}></div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-slate-500 font-medium mb-0.5">
+                      <span>30-Day Rolling</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400">{item.hasRolling ? `${item.rollingAccuracy}% (${item.rollingTotal})` : '—'}</span>
+                    </div>
+                    <div className="h-1.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                      <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${item.hasRolling ? item.rollingAccuracy : 0}%` }}></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Temporal Data Vitals graph (Real) */}
         <div className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm">
           <div className="flex justify-between items-center mb-6">
@@ -213,6 +528,104 @@ export default function ProgressPanel({ stats, logs }: Props) {
           </div>
           <p className="text-center text-xs font-bold text-slate-400 mt-4 tracking-wide uppercase">Weekly Historical Data</p>
         </div>
+      </div>
+
+      {/* Biocompatibility & Procrastination Analysis Deck */}
+      <div className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm flex flex-col gap-6">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 dark:border-slate-800 pb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-purple-100 dark:bg-purple-900/50 text-purple-600 dark:text-purple-400">
+              <Brain className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-bold text-slate-900 dark:text-slate-100 text-lg tracking-tight">
+                Biocompatibility & Attention Drift Matrix
+              </h3>
+              <p className="text-xs font-semibold text-slate-400">
+                Cognitive resilience correlation, procrastination traps, and focus telemetry
+              </p>
+            </div>
+          </div>
+          <span className="text-xs font-bold px-3 py-1 rounded-xl bg-purple-50 dark:bg-purple-950/60 border border-purple-200 dark:border-purple-800 text-purple-700 dark:text-purple-300">
+            {validMoods.length} Biocompatibility Reports Logged
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {/* Mean Resilience Index */}
+          <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Resilience Index</span>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                Number(avgResilience) >= 4 ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400' :
+                Number(avgResilience) >= 3 ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-400' :
+                'bg-amber-100 text-amber-700 dark:bg-amber-950/60 dark:text-amber-400'
+              }`}>
+                {Number(avgResilience) >= 4 ? 'Radiant Flow' : Number(avgResilience) >= 3 ? 'Equilibrium' : 'Depleted'}
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tight">{avgResilience}</span>
+              <span className="text-xs font-bold text-slate-400">/ 5.0 Average</span>
+            </div>
+            <p className="text-[11px] font-medium text-slate-500 mt-2">
+              Modulates autonomic tone, daily health recovery, and cognitive burnout load.
+            </p>
+          </div>
+
+          {/* Procrastination Hazard Vector */}
+          <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Attention Slips</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400">
+                {totalProcrastinationEvents} Logged
+              </span>
+            </div>
+            <div className="flex items-baseline gap-2">
+              <span className="text-4xl font-black text-amber-600 dark:text-amber-400 tracking-tight">{totalProcrastinationEvents}</span>
+              <span className="text-xs font-bold text-slate-400">Breaches</span>
+            </div>
+            <p className="text-[11px] font-medium text-slate-500 mt-2">
+              Attention drifts apply subtle cognitive friction notes without compromising long-term baseline stability.
+            </p>
+          </div>
+
+          {/* Neuro-Somatic Strategy */}
+          <div className="p-5 rounded-2xl bg-slate-50 dark:bg-slate-950/50 border border-slate-200 dark:border-slate-800 flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">Countermeasure</span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-cyan-100 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-400">Active</span>
+            </div>
+            <p className="text-xs font-bold text-slate-700 dark:text-slate-200 leading-snug">
+              {stats.burnoutIndex > 50 
+                ? "Prescribe Recovery Shift: Trigger Rest Mode or a brief mindfulness reset to replenish cognitive reserve."
+                : totalProcrastinationEvents > 2
+                ? "Micro-Dosing MCQs: Start with just 3 rapid cases to overcome activation inertia."
+                : "Equilibrium Sustained: Maintain steady deep-work intervals with scheduled breaks."}
+            </p>
+            <span className="text-[10px] font-semibold text-slate-400 mt-2">Clinical habit intervention</span>
+          </div>
+        </div>
+
+        {/* Identified Procrastination Traps Breakdown */}
+        {topTriggers.length > 0 && (
+          <div className="border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/30 rounded-2xl p-4 flex flex-col gap-3">
+            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+              <ShieldAlert className="w-3.5 h-3.5 text-amber-500" />
+              Primary Distraction Vectors Detected
+            </span>
+            <div className="flex flex-wrap gap-2.5">
+              {topTriggers.map(([trigger, count], i) => (
+                <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 shadow-sm">
+                  <span>{trigger}</span>
+                  <span className="px-1.5 py-0.5 rounded-md bg-amber-100 dark:bg-amber-950/70 text-amber-800 dark:text-amber-400 font-bold text-[10px]">
+                    {count}x
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* AI Chief Resident Oversight */}
