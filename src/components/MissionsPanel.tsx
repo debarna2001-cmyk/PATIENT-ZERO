@@ -7,7 +7,7 @@ import {
   Flame, AlertCircle, Heart, History, Calendar, Check, X, 
   ChevronDown, ChevronUp, XCircle, BookOpen, Tv, Moon, Edit3, Trash2, Plus, Save
 } from "lucide-react";
-import { formatDateDMY, getTodayISO, getDaysAgoISO } from "../lib/dateUtils";
+import { formatDateDMY, getTodayISO, getDaysAgoISO, ensureISODate } from "../lib/dateUtils";
 
 interface Props {
   missions: Mission[];
@@ -19,7 +19,7 @@ interface Props {
   onAddMission: (title: string, category: 'MCQ' | 'Revision' | 'Lectures' | 'Tests' | 'Custom', target: number, unit: string, period?: 'daily' | 'weekly') => void;
   onSimulateSlip: (reason: string) => void;
   studyMode?: 'Normal' | 'Duty' | 'Rest';
-  onLogPastShift?: (date: string, mcqs: number, modules: number, sleep: number, note?: string) => void;
+  onLogPastShift?: (date: string, mcqs: number, modules: number, sleep: number, note?: string, oldDate?: string, statusOverride?: DailyMissionRecord['status'] | 'auto') => void;
   onDeleteArchivedShift?: (date: string) => void;
   initialPastDate?: string | null;
 }
@@ -48,17 +48,18 @@ export default function MissionsPanel({
 
   // Retrospective past shift logger state
   const [showRetroForm, setShowRetroForm] = useState(false);
-  const [retroDate, setRetroDate] = useState(() => getDaysAgoISO(1));
+  const [retroDate, setRetroDate] = useState(() => ensureISODate(getDaysAgoISO(1)));
   const [retroMcqs, setRetroMcqs] = useState(45);
   const [retroModules, setRetroModules] = useState(2);
   const [retroSleep, setRetroSleep] = useState(7.0);
   const [retroNote, setRetroNote] = useState("");
+  const [retroStatus, setRetroStatus] = useState<'auto' | 'Goals Not Met' | 'Partially Met' | 'Target Cleared' | 'Shift Missed'>('auto');
   const [editingArchiveDate, setEditingArchiveDate] = useState<string | null>(null);
 
   useEffect(() => {
     if (initialPastDate) {
       setPanelTab('history');
-      setRetroDate(initialPastDate);
+      setRetroDate(ensureISODate(initialPastDate));
       setShowRetroForm(true);
     }
   }, [initialPastDate]);
@@ -77,26 +78,30 @@ export default function MissionsPanel({
     e.preventDefault();
     sound.click();
     if (onLogPastShift && retroDate) {
-      onLogPastShift(retroDate, retroMcqs, retroModules, retroSleep, retroNote);
+      const cleanDate = ensureISODate(retroDate);
+      onLogPastShift(cleanDate, retroMcqs, retroModules, retroSleep, retroNote, editingArchiveDate || undefined, retroStatus);
       setEditingArchiveDate(null);
       setShowRetroForm(false);
       setRetroNote("");
+      setRetroStatus("auto");
     }
   };
 
   const handleStartEditArchive = (rec: DailyMissionRecord) => {
     sound.click();
-    setRetroDate(rec.date);
+    const cleanDate = ensureISODate(rec.date);
+    setRetroDate(cleanDate);
     setRetroNote(rec.note || "");
-    const mcqsFromStats = stats?.mcqLogs?.[rec.date];
-    const modulesFromStats = stats?.videoLogs?.[rec.date];
-    const sleepFromStats = stats?.sleepLogs?.[rec.date];
+    setRetroStatus(rec.status || 'auto');
+    const mcqsFromStats = stats?.mcqLogs?.[cleanDate] ?? stats?.mcqLogs?.[rec.date];
+    const modulesFromStats = stats?.videoLogs?.[cleanDate] ?? stats?.videoLogs?.[rec.date];
+    const sleepFromStats = stats?.sleepLogs?.[cleanDate] ?? stats?.sleepLogs?.[rec.date];
     const mcqM = rec.missions?.find(m => m.category === 'MCQ');
     const modM = rec.missions?.find(m => m.category === 'Lectures');
-    setRetroMcqs(mcqsFromStats !== undefined ? mcqsFromStats : (mcqM?.current || 40));
-    setRetroModules(modulesFromStats !== undefined ? modulesFromStats : (modM?.current || 2));
+    setRetroMcqs(mcqsFromStats !== undefined ? mcqsFromStats : (mcqM?.current || 0));
+    setRetroModules(modulesFromStats !== undefined ? modulesFromStats : (modM?.current || 0));
     setRetroSleep(sleepFromStats !== undefined ? sleepFromStats : 7.0);
-    setEditingArchiveDate(rec.date);
+    setEditingArchiveDate(cleanDate);
     setShowRetroForm(true);
   };
 
@@ -139,12 +144,12 @@ export default function MissionsPanel({
       </div>
 
       {/* Tab Switcher: Active Shift vs Continuity Archive */}
-      <div className="flex items-center gap-2 p-1.5 bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-fit">
+      <div className="flex items-center gap-1.5 p-1 bg-slate-200/60 dark:bg-slate-900/70 rounded-full w-fit border-0 border-none outline-none">
         <button
           onClick={() => setPanelTab('active')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition outline-none border-0 ${
             panelTab === 'active'
-              ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-cyan-400 shadow-sm'
+              ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-cyan-400 shadow-xs border border-slate-200/70 dark:border-slate-700/60'
               : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
           }`}
         >
@@ -156,9 +161,9 @@ export default function MissionsPanel({
         </button>
         <button
           onClick={() => setPanelTab('history')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition ${
+          className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs font-bold uppercase tracking-wider transition outline-none border-0 ${
             panelTab === 'history'
-              ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-cyan-400 shadow-sm'
+              ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-cyan-400 shadow-xs border border-slate-200/70 dark:border-slate-700/60'
               : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
           }`}
         >
@@ -454,7 +459,7 @@ export default function MissionsPanel({
                   </span>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
                   {/* Shift Date */}
                   <div className="flex flex-col gap-1.5">
                     <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
@@ -469,6 +474,37 @@ export default function MissionsPanel({
                       className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-800 dark:text-slate-200 outline-none focus:border-cyan-400"
                     />
                     <span className="text-[10px] text-slate-400 font-medium">Selected: {formatDateDMY(retroDate)}</span>
+                  </div>
+
+                  {/* Shift Status Outcome */}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-cyan-500" /> Shift Status
+                    </label>
+                    <select
+                      value={retroStatus}
+                      onChange={(e) => {
+                        const val = e.target.value as any;
+                        setRetroStatus(val);
+                        if (val === 'Goals Not Met') {
+                          setRetroNote(`Daily Objectives Not Met on ${formatDateDMY(retroDate)} (${retroMcqs} MCQs, ${retroModules}h Modules)`);
+                        } else if (val === 'Partially Met') {
+                          setRetroNote(`Shift Partially Met on ${formatDateDMY(retroDate)} (${retroMcqs} MCQs, ${retroModules}h Modules)`);
+                        } else if (val === 'Target Cleared') {
+                          setRetroNote(`Shift Cleared: Objectives Met on ${formatDateDMY(retroDate)}`);
+                        } else if (val === 'Shift Missed') {
+                          setRetroNote(`Shift Missed on ${formatDateDMY(retroDate)}`);
+                        }
+                      }}
+                      className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 dark:text-slate-200 outline-none focus:border-cyan-400"
+                    >
+                      <option value="auto">Auto (From Goals)</option>
+                      <option value="Goals Not Met">Goals Not Met</option>
+                      <option value="Partially Met">Partially Met</option>
+                      <option value="Target Cleared">Target Cleared</option>
+                      <option value="Shift Missed">Shift Missed</option>
+                    </select>
+                    <span className="text-[10px] text-slate-400 font-medium">Outcome Classification</span>
                   </div>
 
                   {/* MCQs Solved */}
@@ -615,18 +651,36 @@ export default function MissionsPanel({
             ) : (
               <div className="flex flex-col gap-4">
                 {missionHistory.map((rec) => {
-                  const isExpanded = expandedDate === rec.date;
-                  const isFull = rec.completedRate >= 100;
-                  const isPartial = rec.completedRate > 0 && rec.completedRate < 100;
+                  const recDateISO = ensureISODate(rec.date);
+                  const isExpanded = expandedDate === rec.date || expandedDate === recDateISO;
+                  const isMissed = rec.status === 'Shift Missed';
+                  const isExplicitNotMet = rec.status === 'Goals Not Met';
+                  const mcqCount = stats?.mcqLogs?.[recDateISO] ?? stats?.mcqLogs?.[rec.date] ?? (rec.missions?.find(m => m.category === 'MCQ')?.current || 0);
+                  const videoCount = stats?.videoLogs?.[recDateISO] ?? stats?.videoLogs?.[rec.date] ?? (rec.missions?.find(m => m.category === 'Lectures')?.current || 0);
+                  const isGoalsNotMet = isExplicitNotMet || (rec.status !== 'Target Cleared' && rec.status !== 'Partially Met' && (rec.completedRate === 0 || (mcqCount === 0 && videoCount === 0 && rec.completedRate < 50)));
+                  const isFull = !isGoalsNotMet && !isMissed && (rec.status === 'Target Cleared' || rec.completedRate >= 100);
+                  const isPartial = !isGoalsNotMet && !isMissed && !isFull && (rec.status === 'Partially Met' || (rec.completedRate > 0 && rec.completedRate < 100));
+
+                  const displayNote = (() => {
+                    if (!rec.note) return "";
+                    const lower = rec.note.toLowerCase();
+                    if (isGoalsNotMet && (lower.includes("partially met") || lower.includes("shift partially") || lower.includes("objectives met on"))) {
+                      return `Daily Objectives Not Met on ${formatDateDMY(recDateISO)} (${mcqCount} MCQs, ${videoCount}h Modules)`;
+                    }
+                    if (isPartial && (lower.includes("goals not met") || lower.includes("daily objectives not met") || lower.includes("shift missed"))) {
+                      return `Shift Partially Met: ${rec.completedCount} of ${rec.totalCount} Objectives`;
+                    }
+                    return rec.note;
+                  })();
                   
                   return (
                     <div
-                      key={rec.date}
+                      key={recDateISO}
                       className="border border-slate-200 dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-950/40 p-5 transition hover:border-slate-300 dark:hover:border-slate-700 flex flex-col gap-4"
                     >
                       <div
                         className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer select-none"
-                        onClick={() => setExpandedDate(isExpanded ? null : rec.date)}
+                        onClick={() => setExpandedDate(isExpanded ? null : recDateISO)}
                       >
                         <div className="flex items-center gap-3">
                           <div className={`p-2.5 rounded-xl border flex items-center justify-center ${
@@ -641,39 +695,39 @@ export default function MissionsPanel({
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="font-black text-slate-900 dark:text-slate-100 text-base tracking-tight font-mono">
-                                Shift Date: {formatDateDMY(rec.date)}
+                                Shift Date: {formatDateDMY(recDateISO)}
                               </span>
-                              {rec.date === getTodayISO() && (
+                              {recDateISO === getTodayISO() && (
                                 <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-cyan-100 dark:bg-cyan-900 text-cyan-700 dark:text-cyan-300">
                                   Today's Shift
                                 </span>
                               )}
-                              {(rec.status === 'Shift Missed' || (rec.completedRate === 0 && rec.date !== getTodayISO())) && (
+                              {(isMissed || (rec.completedRate === 0 && recDateISO !== getTodayISO() && !isGoalsNotMet && rec.status !== 'Goals Not Met')) && (
                                 <span className="text-[10px] uppercase font-bold tracking-widest px-2 py-0.5 rounded bg-rose-100 dark:bg-rose-950 text-rose-700 dark:text-rose-400 border border-rose-200 dark:border-rose-900">
                                   Shift Missed
                                 </span>
                               )}
                             </div>
                             <div className="flex items-center gap-2 flex-wrap text-xs text-slate-500 mt-0.5">
-                              {stats?.mcqLogs?.[rec.date] !== undefined && (
+                              {(stats?.mcqLogs?.[recDateISO] !== undefined || stats?.mcqLogs?.[rec.date] !== undefined) && (
                                 <span className="font-semibold text-orange-600 dark:text-orange-400">
-                                  {stats.mcqLogs[rec.date]} MCQs
+                                  {stats?.mcqLogs?.[recDateISO] ?? stats?.mcqLogs?.[rec.date]} MCQs
                                 </span>
                               )}
-                              {stats?.videoLogs?.[rec.date] !== undefined && (
+                              {(stats?.videoLogs?.[recDateISO] !== undefined || stats?.videoLogs?.[rec.date] !== undefined) && (
                                 <span className="font-semibold text-purple-600 dark:text-purple-400">
-                                  • {stats.videoLogs[rec.date]} Modules
+                                  • {stats?.videoLogs?.[recDateISO] ?? stats?.videoLogs?.[rec.date]} Modules
                                 </span>
                               )}
-                              {stats?.sleepLogs?.[rec.date] !== undefined && (
+                              {(stats?.sleepLogs?.[recDateISO] !== undefined || stats?.sleepLogs?.[rec.date] !== undefined) && (
                                 <span className="font-semibold text-indigo-600 dark:text-indigo-400">
-                                  • {stats.sleepLogs[rec.date]}h Sleep
+                                  • {stats?.sleepLogs?.[recDateISO] ?? stats?.sleepLogs?.[rec.date]}h Sleep
                                 </span>
                               )}
-                              <span className={!isFull && !isPartial ? 'text-rose-500 dark:text-rose-400 font-semibold' : 'font-medium'}>
+                              <span className={isGoalsNotMet ? 'text-rose-500 dark:text-rose-400 font-semibold' : !isFull && !isPartial ? 'text-rose-500 dark:text-rose-400 font-semibold' : 'font-medium'}>
                                 • {rec.completedCount} of {rec.totalCount} Objectives ({rec.completedRate}%)
                               </span>
-                              {rec.note && <span className="italic opacity-85">• {rec.note}</span>}
+                              {displayNote && <span className="italic opacity-85">• {displayNote}</span>}
                             </div>
                           </div>
                         </div>
@@ -686,7 +740,15 @@ export default function MissionsPanel({
                                 ? "bg-amber-50 dark:bg-amber-950 text-amber-700 dark:text-amber-400 border-amber-200 dark:border-amber-800"
                                 : "bg-rose-50 dark:bg-rose-950 text-rose-700 dark:text-rose-400 border-rose-200 dark:border-rose-800 font-extrabold"
                           }`}>
-                            {isFull ? "Target Cleared" : isPartial ? "Partially Met" : "Goals Not Met"}
+                            {isMissed 
+                              ? "Shift Missed" 
+                              : isGoalsNotMet 
+                                ? "Goals Not Met" 
+                                : isFull 
+                                  ? "Target Cleared" 
+                                  : isPartial 
+                                    ? "Partially Met" 
+                                    : "Goals Not Met"}
                           </span>
 
                           {onLogPastShift && (
@@ -709,8 +771,8 @@ export default function MissionsPanel({
                               onClick={(e) => {
                                 e.stopPropagation();
                                 sound.click();
-                                if (window.confirm ? window.confirm(`Remove archived record for ${formatDateDMY(rec.date)}?`) : true) {
-                                  onDeleteArchivedShift(rec.date);
+                                if (window.confirm ? window.confirm(`Remove archived record for ${formatDateDMY(recDateISO)}?`) : true) {
+                                  onDeleteArchivedShift(recDateISO);
                                 }
                               }}
                               className="p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 hover:text-rose-500 transition"

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, FormEvent } from "react";
+import { useState, useEffect, useRef, useCallback, FormEvent } from "react";
 import { PatientVitals, ClinicalCase, UserStats, EmergencyLog, Mission, MoodLog, DailyMissionRecord } from "./types";
 import { fallbackCases } from "./fallbackCases";
 import VitalsMonitor from "./components/VitalsMonitor";
@@ -8,10 +8,11 @@ import HelpManual from "./components/HelpManual";
 import { sound } from "./lib/audio";
 import { registerServiceWorker, triggerNotification } from "./lib/notifications";
 import { getNarrativeState, NarrativeState } from './lib/narrative';
-import { formatDateDMY, formatDateTimeDMY, getTodayISO, getIntermediateISODates, getDaysDiff, getCurrentMondayISO, getDaysAgoISO } from "./lib/dateUtils";
+import { formatDateDMY, formatDateTimeDMY, getTodayISO, getIntermediateISODates, getDaysDiff, getCurrentMondayISO, getDaysAgoISO, ensureISODate } from "./lib/dateUtils";
 import { auth, db, signInWithGoogle, signOut, handleFirestoreError, OperationType } from "./lib/firebase";
 import { onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 import { doc, getDoc, setDoc, deleteDoc, onSnapshot, collection } from "firebase/firestore";
+import { computeRolloverTransition, executeUnifiedRollover } from "./lib/rolloverEngine";
 
 import MissionsPanel from "./components/MissionsPanel";
 import ProgressPanel from "./components/ProgressPanel";
@@ -21,13 +22,14 @@ import RewardsPanel from "./components/RewardsPanel";
 import WellnessPanel from "./components/WellnessPanel";
 import SettingsPanel from "./components/SettingsPanel";
 import DashboardTab from "./components/DashboardTab";
+import { SubTabControl, SubTabItem, SwipeableTabContainer } from "./components/SubTabControl";
 import { formatDoctorName } from "./lib/doctorUtils";
 
 import { motion, AnimatePresence } from "motion/react";
 import {
   Stethoscope, ShieldAlert, ShieldCheck, Award, Clock, BookOpen, AlertOctagon, ChevronRight, ChevronDown, User,
   Compass, RefreshCw, Check, X, Sparkles, Zap, Activity, Heart, TrendingUp, Brain, Smile,
-  AlertTriangle, Lightbulb, Volume2, VolumeX, Menu, LogOut, FileText, BarChart3, Settings, Calendar, Flame,
+  AlertTriangle, Lightbulb, Volume2, VolumeX, LogOut, FileText, BarChart3, Settings, Calendar, Flame,
   Medal, Gift, Trophy, ShoppingBag, Gamepad2, Ticket, Pizza, Music, Cpu, LogIn, ArrowLeft, Maximize2
 } from "lucide-react";
 
@@ -104,6 +106,12 @@ const DEFAULT_MISSIONS: Mission[] = [
   { id: "m-03-gt", title: "Defeat the Weekly Grand Test (GT)", category: "Tests", target: 1, current: 0, unit: "GT", xpReward: 500, stabilizeValue: 100, status: "Pending", period: "weekly" }
 ];
 
+const JOURNEY_SUBTABS: SubTabItem<"journey" | "wellness" | "achievements">[] = [
+  { id: "journey", label: "Journey", icon: <Compass className="w-4 h-4 shrink-0" />, activeColor: "text-cyan-700 dark:text-cyan-300" },
+  { id: "wellness", label: "Wellness", icon: <ShieldCheck className="w-4 h-4 shrink-0" />, activeColor: "text-teal-700 dark:text-teal-300" },
+  { id: "achievements", label: "Achievements", icon: <Award className="w-4 h-4 shrink-0" />, activeColor: "text-amber-700 dark:text-amber-300" }
+];
+
 export default function App() {
   const [authUser, setAuthUser] = useState<FirebaseUser | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -117,8 +125,23 @@ export default function App() {
   }, []);
 
   const [activeTab, setActiveTab] = useState<"dashboard" | "missions" | "triage" | "progress" | "avatar" | "achievements" | "rewards" | "settings" | "vault">("dashboard");
-  const [honorsSubTab, setHonorsSubTab] = useState<"map" | "wellness">("map");
+  const [journeySubTab, setJourneySubTab] = useState<"journey" | "wellness" | "achievements">("journey");
+  const [analyticsSubTab, setAnalyticsSubTab] = useState<"performance" | "trends" | "ai_review">("performance");
   const [vaultView, setVaultView] = useState<"pearls" | "history">("pearls");
+
+  const journeyTabsList: ("journey" | "wellness" | "achievements")[] = ["journey", "wellness", "achievements"];
+  const handleJourneySwipeLeft = () => {
+    const idx = journeyTabsList.indexOf(journeySubTab);
+    if (idx < journeyTabsList.length - 1) {
+      setJourneySubTab(journeyTabsList[idx + 1]);
+    }
+  };
+  const handleJourneySwipeRight = () => {
+    const idx = journeyTabsList.indexOf(journeySubTab);
+    if (idx > 0) {
+      setJourneySubTab(journeyTabsList[idx - 1]);
+    }
+  };
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem("patient_zero_v2_theme");
     return saved ? saved === "dark" : true;
@@ -169,17 +192,42 @@ export default function App() {
     return () => clearInterval(timerId);
   }, []);
 
-  const handleTabChange = (tab: typeof activeTab) => {
+  const handleTabChange = (tab: any) => {
     if (tab === "settings") {
       setIsProfileSettingsOpen(true);
       return;
     }
-    if (tab === "avatar") {
+    if (tab === "achievements") {
+      setActiveTab("rewards");
+      setJourneySubTab("achievements");
+      return;
+    }
+    if (tab === "wellness") {
+      setActiveTab("rewards");
+      setJourneySubTab("wellness");
+      return;
+    }
+    if (tab === "journey") {
+      setActiveTab("rewards");
+      setJourneySubTab("journey");
+      return;
+    }
+    if (tab === "pearls" || tab === "vault") {
+      setActiveTab("progress");
+      setAnalyticsSubTab("ai_review");
+      return;
+    }
+    if (tab === "analytics" || tab === "progress") {
       setActiveTab("progress");
       return;
     }
-    if (tab === "achievements") {
-      setActiveTab("progress");
+    if (tab === "journey_wellness" || tab === "rewards") {
+      setActiveTab("rewards");
+      return;
+    }
+    if (tab === "avatar") {
+      setActiveTab("rewards");
+      setJourneySubTab("journey");
       return;
     }
     setActiveTab(tab);
@@ -239,10 +287,13 @@ export default function App() {
       setInAppToast(prev => (prev === msg ? null : prev));
     }, 3200);
   };
-  const [moodRating, setMoodRating] = useState<number>(3);
-  const [moodTrigger, setMoodTrigger] = useState<string>("");
-  const [showSleepModal, setShowSleepModal] = useState<boolean>(false);
-  const [sleepHours, setSleepHours] = useState<number>(8);
+
+  const statsRef = useRef(stats);
+  const missionsRef = useRef(missions);
+  const historyRef = useRef(missionHistory);
+  useEffect(() => { statsRef.current = stats; }, [stats]);
+  useEffect(() => { missionsRef.current = missions; }, [missions]);
+  useEffect(() => { historyRef.current = missionHistory; }, [missionHistory]);
 
   const [isDevSandboxMode, setIsDevSandboxMode] = useState<boolean>(() => {
     return localStorage.getItem("patient_zero_dev_sandbox") === "true";
@@ -258,6 +309,33 @@ export default function App() {
       return next;
     });
   };
+
+  const runRolloverCheck = useCallback(() => {
+    if (!statsLoadedRef.current) return;
+    executeUnifiedRollover({
+      stats: statsRef.current,
+      missions: missionsRef.current.length > 0 ? missionsRef.current : DEFAULT_MISSIONS,
+      history: historyRef.current,
+      options: {
+        defaultMissions: DEFAULT_MISSIONS
+      },
+      authUser,
+      db,
+      isGuest: !authUser || isDevSandboxMode,
+      onApplyState: (nextStats, nextMissions, nextHistory) => {
+        setStats(nextStats);
+        setMissions(nextMissions);
+        setMissionHistory(nextHistory);
+      },
+      onNotify: (msg) => {
+        showNotification(msg);
+      }
+    });
+  }, [authUser, isDevSandboxMode]);
+  const [moodRating, setMoodRating] = useState<number>(3);
+  const [moodTrigger, setMoodTrigger] = useState<string>("");
+  const [showSleepModal, setShowSleepModal] = useState<boolean>(false);
+  const [sleepHours, setSleepHours] = useState<number>(8);
 
   // Guest / Offline Mode persistence and daily continuity handler
   useEffect(() => {
@@ -298,120 +376,25 @@ export default function App() {
     const savedHistoryStr = localStorage.getItem("patient_zero_v2_mission_history") || localStorage.getItem("patient_zero_history");
     let loadedHistory: DailyMissionRecord[] = [];
     if (savedHistoryStr) {
-      try { loadedHistory = JSON.parse(savedHistoryStr); } catch (e) {}
+      try {
+        const parsed = JSON.parse(savedHistoryStr);
+        if (Array.isArray(parsed)) {
+          loadedHistory = parsed.map(r => ({ ...r, date: ensureISODate(r.date) }));
+        }
+      } catch (e) {}
     }
 
-    const currentMondayStr = getCurrentMondayISO();
-    
-    const isNewWeek = loadedStats.currentWeekStart !== currentMondayStr;
-    const isNewDay = loadedStats.lastMissionResetDate !== today;
-
-    if (isNewDay || isNewWeek) {
-      const prevDate = loadedStats.lastMissionResetDate || today;
-      if (isNewDay && prevDate !== today) {
-        // 1. Evaluate and archive previous active day (prevDate)
-        if (loadedMissions.length > 0) {
-          const dailyOnly = loadedMissions.filter(m => (m.period || 'daily') === 'daily');
-          const completed = dailyOnly.filter(m => m.status === 'Completed').length;
-          const total = dailyOnly.length;
-          const isRestDay = loadedStats.studyMode === 'Rest';
-          const isCleared = isRestDay || (total > 0 && completed === total);
-          const isPartial = !isRestDay && completed > 0 && !isCleared;
-          const status: DailyMissionRecord['status'] = isRestDay ? 'Target Cleared' : isCleared ? 'Target Cleared' : isPartial ? 'Partially Met' : 'Goals Not Met';
-          const archiveRecord: DailyMissionRecord = {
-            date: prevDate,
-            completedCount: isRestDay ? total : completed,
-            totalCount: total,
-            completedRate: isRestDay ? 100 : (total > 0 ? Math.round((completed / total) * 100) : 0),
-            status,
-            note: isRestDay ? 'Recovery Rest Day Completed (Objectives Excused)' : isCleared ? 'All daily objectives cleared' : isPartial ? 'Shift partially completed' : 'Daily objectives not met',
-            missions: loadedMissions.map(m => ({ ...m })),
-            archivedAt: new Date().toISOString()
-          };
-          const idx = loadedHistory.findIndex(r => r.date === prevDate);
-          if (idx >= 0) loadedHistory[idx] = archiveRecord;
-          else loadedHistory.unshift(archiveRecord);
-
-          // Scientifically grounded allostatic adaptation model:
-          // Long-term preparation is a marathon governed by allostasis and habit preservation.
-          // Small daily variances apply gentle, realistic adjustments rather than demoralizing crashes.
-          const yesterdaySleep = loadedStats.sleepLogs?.[prevDate] || 0;
-          const sleepBonus = yesterdaySleep >= 7 ? 3 : yesterdaySleep > 0 && yesterdaySleep < 5 ? -3 : 0;
-          const sleepBurnoutBonus = yesterdaySleep >= 7 ? -5 : yesterdaySleep > 0 && yesterdaySleep < 5 ? 4 : 0;
-
-          if (isRestDay) {
-            loadedStats.patientHealth = Math.min(100, Math.max(35, loadedStats.patientHealth + 8 + sleepBonus));
-            loadedStats.burnoutIndex = Math.min(100, Math.max(0, loadedStats.burnoutIndex - 18 + sleepBurnoutBonus));
-            loadedStats.shiftStreak = (loadedStats.shiftStreak || 0) + 1;
-            loadedStats.studyMode = 'Normal';
-          } else if (isCleared) {
-            loadedStats.patientHealth = Math.min(100, Math.max(35, loadedStats.patientHealth + 6 + sleepBonus));
-            loadedStats.burnoutIndex = Math.min(100, Math.max(0, loadedStats.burnoutIndex - 8 + sleepBurnoutBonus));
-            loadedStats.shiftStreak = (loadedStats.shiftStreak || 0) + 1;
-          } else if (isPartial) {
-            // Partial completion acknowledges effort, keeping behavioral momentum alive
-            loadedStats.patientHealth = Math.min(100, Math.max(35, loadedStats.patientHealth + 2 + sleepBonus));
-            loadedStats.burnoutIndex = Math.min(100, Math.max(0, loadedStats.burnoutIndex - 2 + sleepBurnoutBonus));
-            loadedStats.shiftStreak = Math.max(1, (loadedStats.shiftStreak || 0));
-          } else {
-            // Unmet shift: gentle allostatic strain (-3% health, +4% burnout)
-            loadedStats.patientHealth = Math.min(100, Math.max(35, loadedStats.patientHealth - 3 + sleepBonus));
-            loadedStats.burnoutIndex = Math.min(65, loadedStats.burnoutIndex + 4 + sleepBurnoutBonus);
-            // 1-day grace buffer: step down by 1 rather than wiping out weeks of work
-            loadedStats.shiftStreak = Math.max(0, (loadedStats.shiftStreak || 0) - 1);
-          }
-        }
-
-        // 2. Generate archive records & gentle allostatic adjustment for intermediate days
-        const intermediateMissedDates = getIntermediateISODates(prevDate, today);
-        intermediateMissedDates.forEach(missedDate => {
-          const existingIdx = loadedHistory.findIndex(r => r.date === missedDate);
-          if (existingIdx === -1) {
-            const dailyDefaults = DEFAULT_MISSIONS.filter(m => (m.period || 'daily') === 'daily');
-            const missedRecord: DailyMissionRecord = {
-              date: missedDate,
-              completedCount: 0,
-              totalCount: dailyDefaults.length,
-              completedRate: 0,
-              status: 'Shift Missed',
-              note: 'Shift Missed — Goals Not Met',
-              missions: dailyDefaults.map(m => ({ ...m, current: 0, status: 'Pending' })),
-              archivedAt: new Date().toISOString()
-            };
-            loadedHistory.push(missedRecord);
-          }
-          // Gentle allostatic calibration for missed days: -3% reserve and +3% burnout per missed day,
-          // with a minimum floor of 35% so the user is never demoralized or trapped in panic.
-          loadedStats.patientHealth = Math.max(35, loadedStats.patientHealth - 3);
-          loadedStats.burnoutIndex = Math.min(65, loadedStats.burnoutIndex + 3);
-          loadedStats.shiftStreak = Math.max(0, (loadedStats.shiftStreak || 0) - 1);
-          if (!loadedStats.activityLogs) loadedStats.activityLogs = {};
-          if (loadedStats.activityLogs[missedDate] === undefined) {
-            loadedStats.activityLogs[missedDate] = 0;
-          }
-        });
-
-        loadedHistory.sort((a, b) => b.date.localeCompare(a.date));
-        localStorage.setItem("patient_zero_v2_mission_history", JSON.stringify(loadedHistory));
-      }
-
-      loadedMissions = loadedMissions.map(m => {
-        const period = m.period || 'daily';
-        const shouldReset = (isNewDay && period === 'daily') || (isNewWeek && period === 'weekly');
-        if (shouldReset) {
-          return { ...m, current: 0, status: 'Pending' };
-        }
-        return m;
-      });
-      localStorage.setItem("patient_zero_v2_missions", JSON.stringify(loadedMissions));
-
-      loadedStats.lastMissionResetDate = today;
-      if (isNewWeek) {
-        loadedStats.currentWeekStart = currentMondayStr;
-        loadedStats.dutyDaysUsed = 0;
-        loadedStats.restDaysUsed = 0;
-      }
+    // Consolidated idempotent rollover evaluation on initial load
+    const rollover = computeRolloverTransition(loadedStats, loadedMissions, loadedHistory, {
+      defaultMissions: DEFAULT_MISSIONS
+    });
+    if (rollover.hasChanges) {
+      loadedStats = rollover.nextStats;
+      loadedMissions = rollover.nextMissions;
+      loadedHistory = rollover.nextHistory;
       localStorage.setItem("patient_zero_v2_stats", JSON.stringify(loadedStats));
+      localStorage.setItem("patient_zero_v2_missions", JSON.stringify(loadedMissions));
+      localStorage.setItem("patient_zero_v2_mission_history", JSON.stringify(loadedHistory));
     }
 
     // Ensure firstActiveDate is permanently established so "system active" is never stuck on 1 day
@@ -448,126 +431,37 @@ export default function App() {
              const isNewWeek = loadedStats.currentWeekStart !== currentMondayStr;
              const isNewDay = loadedStats.lastMissionResetDate !== today;
 
-             let needsUpdate = false;
-             const updates: any = {};
-
              if (!loadedStats.firstActiveDate) {
                  const firstDate = loadedStats.createdAt ? loadedStats.createdAt.slice(0, 10) : "2026-10-07";
                  loadedStats.firstActiveDate = firstDate;
-                 updates.firstActiveDate = firstDate;
-                 needsUpdate = true;
+                 if (!docSnap.metadata.fromCache) {
+                   import("firebase/firestore").then(({ updateDoc, doc: fDoc }) => {
+                     updateDoc(fDoc(db, "users", authUser.uid), { firstActiveDate: firstDate }).catch(console.error);
+                   });
+                 }
              }
 
-             if (isNewDay) {
-                 loadedStats.lastMissionResetDate = today;
-                 updates.lastMissionResetDate = today;
-                 needsUpdate = true;
-             }
-             
-             if (isNewWeek) {
-                 loadedStats.currentWeekStart = currentMondayStr;
-                 loadedStats.dutyDaysUsed = 0;
-                 loadedStats.restDaysUsed = 0;
-                 updates.currentWeekStart = currentMondayStr;
-                 updates.dutyDaysUsed = 0;
-                 updates.restDaysUsed = 0;
-                 needsUpdate = true;
-             }
-
-             if (needsUpdate && !docSnap.metadata.fromCache) {
-                 import("firebase/firestore").then(({ updateDoc, getDocs, collection, setDoc, doc: fDoc }) => {
-                     getDocs(collection(db, "users", authUser.uid, "missions")).then(msnap => {
-                         const prevMissions = msnap.docs.map(d => d.data() as Mission);
-                         const prevDate = docSnap.data().lastMissionResetDate;
-                         if (isNewDay && prevDate && prevDate !== today) {
-                             if (prevMissions.length > 0) {
-                                 const dailyOnly = prevMissions.filter(m => (m.period || 'daily') === 'daily');
-                                 const completed = dailyOnly.filter(m => m.status === 'Completed').length;
-                                 const total = dailyOnly.length;
-                                 const isCleared = total > 0 && completed === total;
-                                 const isPartial = completed > 0 && !isCleared;
-                                 const status: DailyMissionRecord['status'] = isCleared ? 'Target Cleared' : isPartial ? 'Partially Met' : 'Goals Not Met';
-                                 const archiveRecord: DailyMissionRecord = {
-                                     date: prevDate,
-                                     completedCount: completed,
-                                     totalCount: total,
-                                     completedRate: total > 0 ? Math.round((completed / total) * 100) : 0,
-                                     status,
-                                     note: isCleared ? 'All daily objectives cleared' : isPartial ? 'Shift partially completed' : 'Daily objectives not met',
-                                     missions: prevMissions.map(m => ({
-                                         id: m.id,
-                                         title: m.title,
-                                         category: m.category,
-                                         target: m.target,
-                                         current: m.current,
-                                         unit: m.unit,
-                                         status: m.status,
-                                         period: m.period || 'daily'
-                                     })),
-                                     archivedAt: new Date().toISOString()
-                                 };
-                                 setDoc(fDoc(db, "users", authUser.uid, "mission_history", prevDate), archiveRecord).catch(console.error);
-
-                                 if (isCleared) {
-                                     loadedStats.patientHealth = Math.min(100, Math.max(35, loadedStats.patientHealth + 6));
-                                     loadedStats.burnoutIndex = Math.max(0, loadedStats.burnoutIndex - 8);
-                                     loadedStats.shiftStreak = (loadedStats.shiftStreak || 0) + 1;
-                                 } else if (isPartial) {
-                                     loadedStats.patientHealth = Math.min(100, Math.max(35, loadedStats.patientHealth + 2));
-                                     loadedStats.burnoutIndex = Math.max(0, loadedStats.burnoutIndex - 2);
-                                     loadedStats.shiftStreak = Math.max(1, (loadedStats.shiftStreak || 0));
-                                 } else {
-                                     loadedStats.patientHealth = Math.max(35, loadedStats.patientHealth - 3);
-                                     loadedStats.burnoutIndex = Math.min(65, loadedStats.burnoutIndex + 4);
-                                     loadedStats.shiftStreak = Math.max(0, (loadedStats.shiftStreak || 0) - 1);
-                                 }
-                             }
-
-                             // Backfill any intermediate days when app was not opened
-                             const intermediateMissed = getIntermediateISODates(prevDate, today);
-                             intermediateMissed.forEach(missedDate => {
-                                 const dailyDefaults = DEFAULT_MISSIONS.filter(m => (m.period || 'daily') === 'daily');
-                                 const missedRecord: DailyMissionRecord = {
-                                     date: missedDate,
-                                     completedCount: 0,
-                                     totalCount: dailyDefaults.length,
-                                     completedRate: 0,
-                                     status: 'Shift Missed',
-                                     note: 'Shift Missed — Goals Not Met',
-                                     missions: dailyDefaults.map(m => ({ ...m, current: 0, status: 'Pending' })),
-                                     archivedAt: new Date().toISOString()
-                                 };
-                                 setDoc(fDoc(db, "users", authUser.uid, "mission_history", missedDate), missedRecord).catch(console.error);
-                                 
-                                 loadedStats.patientHealth = Math.max(35, loadedStats.patientHealth - 3);
-                                 loadedStats.burnoutIndex = Math.min(65, loadedStats.burnoutIndex + 3);
-                                 loadedStats.shiftStreak = Math.max(0, (loadedStats.shiftStreak || 0) - 1);
-                             });
-
-                             updates.patientHealth = loadedStats.patientHealth;
-                             updates.burnoutIndex = loadedStats.burnoutIndex;
-                             updates.shiftStreak = loadedStats.shiftStreak;
-                         }
-
-                         updateDoc(fDoc(db, "users", authUser.uid), updates).catch(console.error);
-
-                         msnap.docs.forEach(mdoc => {
-                             const mData = mdoc.data() as Mission;
-                             const period = mData.period || 'daily';
-                             // If it's a new day, we reset daily missions.
-                             // If it's a new week, we reset weekly missions.
-                             const shouldReset = (isNewDay && period === 'daily') || (isNewWeek && period === 'weekly');
-                             
-                             if (shouldReset && (mData.current > 0 || mData.status !== "Pending")) {
-                                 setDoc(fDoc(db, "users", authUser.uid, "missions", mData.id), { ...mData, current: 0, status: "Pending" });
-                             }
-                         });
-                     }).catch(console.error);
-                 });
-             }
-             
              setStats(loadedStats);
              setStatsLoaded(true);
+
+             // Unified idempotent rollover execution across offline and cloud
+             if ((isNewDay || isNewWeek) && !docSnap.metadata.fromCache) {
+               executeUnifiedRollover({
+                 stats: loadedStats,
+                 missions: missionsRef.current.length > 0 ? missionsRef.current : DEFAULT_MISSIONS,
+                 history: historyRef.current,
+                 options: { defaultMissions: DEFAULT_MISSIONS },
+                 authUser,
+                 db,
+                 isGuest: false,
+                 onApplyState: (nextStats, nextMissions, nextHistory) => {
+                   setStats(nextStats);
+                   setMissions(nextMissions);
+                   setMissionHistory(nextHistory);
+                 },
+                 onNotify: (msg) => showNotification(msg)
+               });
+             }
         } else {
              // init
              setDoc(doc(db, "users", authUser.uid), DEFAULT_STATS).then(() => setStatsLoaded(true)).catch(e => handleFirestoreError(e, OperationType.CREATE, "users"));
@@ -664,7 +558,10 @@ export default function App() {
     }, (e) => handleFirestoreError(e, OperationType.GET, "moods"));
 
     const historyUnsub = onSnapshot(collection(db, "users", authUser.uid, "mission_history"), (snapshot) => {
-        const list = snapshot.docs.map(d => d.data() as DailyMissionRecord);
+        const list = snapshot.docs.map(d => {
+          const rec = d.data() as DailyMissionRecord;
+          return { ...rec, date: ensureISODate(rec.date || d.id) };
+        });
         list.sort((a,b) => b.date.localeCompare(a.date));
         setMissionHistory(list);
     }, (e) => handleFirestoreError(e, OperationType.GET, "mission_history"));
@@ -744,11 +641,20 @@ export default function App() {
     const dailyOnly = currentMissions.filter(m => (m.period || 'daily') === 'daily');
     const completed = dailyOnly.filter(m => m.status === 'Completed').length;
     const total = dailyOnly.length;
+    const isCleared = total > 0 && completed === total;
+    const isPartial = completed > 0 && !isCleared;
+    const status: DailyMissionRecord['status'] = isCleared ? 'Target Cleared' : isPartial ? 'Partially Met' : 'Goals Not Met';
     const todayRecord: DailyMissionRecord = {
       date: today,
       completedCount: completed,
       totalCount: total,
       completedRate: total > 0 ? Math.round((completed / total) * 100) : 0,
+      status,
+      note: isCleared 
+        ? 'All daily objectives cleared' 
+        : isPartial 
+          ? `Shift Partially Met: ${completed} of ${total} Objectives` 
+          : `Daily Objectives Not Met on ${formatDateDMY(today)}`,
       missions: currentMissions.map(m => ({
         id: m.id,
         title: m.title,
@@ -851,109 +757,11 @@ export default function App() {
 
   const handleSessionActivityCheck = () => {
     const now = Date.now();
-    const today = getTodayISO();
     lastActiveRef.current = now;
     localStorage.setItem("patient_zero_last_active", now.toString());
 
-    // Check if calendar day rolled over while session was open or tab was refocused
-    if (statsLoaded && stats.lastMissionResetDate && stats.lastMissionResetDate !== today) {
-      const prevDate = stats.lastMissionResetDate;
-      const dailyOnly = missions.filter(m => (m.period || 'daily') === 'daily');
-      const completed = dailyOnly.filter(m => m.status === 'Completed').length;
-      const total = dailyOnly.length;
-      const isCleared = total > 0 && completed === total;
-      const isPartial = completed > 0 && !isCleared;
-      const status: DailyMissionRecord['status'] = isCleared ? 'Target Cleared' : isPartial ? 'Partially Met' : 'Goals Not Met';
-
-      const prevArchive: DailyMissionRecord = {
-        date: prevDate,
-        completedCount: completed,
-        totalCount: total,
-        completedRate: total > 0 ? Math.round((completed / total) * 100) : 0,
-        status,
-        note: isCleared ? 'All daily objectives cleared' : isPartial ? 'Shift partially completed' : 'Daily objectives not met',
-        missions: missions.map(m => ({ ...m })),
-        archivedAt: new Date().toISOString()
-      };
-
-      // Missed days between prevDate and today
-      const missedDates = getIntermediateISODates(prevDate, today);
-      const newHistoryRecords: DailyMissionRecord[] = [prevArchive];
-      let missedDaysPenalty = 0;
-
-      missedDates.forEach(missedDate => {
-        const defaultDaily = DEFAULT_MISSIONS.filter(m => (m.period || 'daily') === 'daily');
-        newHistoryRecords.push({
-          date: missedDate,
-          completedCount: 0,
-          totalCount: defaultDaily.length,
-          completedRate: 0,
-          status: 'Shift Missed',
-          note: 'Shift Missed — Goals Not Met',
-          missions: defaultDaily.map(m => ({ ...m, current: 0, status: 'Pending' })),
-          archivedAt: new Date().toISOString()
-        });
-        missedDaysPenalty += 4;
-      });
-
-      // Update history
-      setMissionHistory(prev => {
-        const updated = [...prev];
-        newHistoryRecords.forEach(rec => {
-          const idx = updated.findIndex(r => r.date === rec.date);
-          if (idx >= 0) updated[idx] = rec;
-          else updated.push(rec);
-        });
-        updated.sort((a, b) => b.date.localeCompare(a.date));
-        return updated;
-      });
-
-      // Reset today's daily missions
-      const resetMissions = missions.map(m => (m.period || 'daily') === 'daily' ? { ...m, current: 0, status: 'Pending' as const } : m);
-      setMissions(resetMissions);
-
-      // Evaluate health and burnout based on goals met / missed
-      modifyStats(prev => {
-        let newHealth = prev.patientHealth;
-        let newBurnout = prev.burnoutIndex;
-        let newStreak = prev.shiftStreak;
-
-        if (isCleared) {
-          newHealth = Math.min(100, Math.max(35, newHealth + 6));
-          newBurnout = Math.max(0, newBurnout - 8);
-          newStreak += 1;
-        } else if (isPartial) {
-          newHealth = Math.min(100, Math.max(35, newHealth + 2));
-          newBurnout = Math.max(0, newBurnout - 2);
-          newStreak = Math.max(1, newStreak);
-        } else {
-          newHealth = Math.max(35, newHealth - 3);
-          newBurnout = Math.min(65, newBurnout + 4);
-          newStreak = Math.max(0, newStreak - 1);
-        }
-
-        if (missedDaysPenalty > 0) {
-          newHealth = Math.max(35, newHealth - Math.min(8, missedDaysPenalty));
-          newBurnout = Math.min(65, newBurnout + Math.min(8, missedDaysPenalty));
-          newStreak = Math.max(0, newStreak - Math.round(missedDaysPenalty / 4));
-        }
-
-        return {
-          ...prev,
-          patientHealth: newHealth,
-          burnoutIndex: newBurnout,
-          shiftStreak: newStreak,
-          lastMissionResetDate: today,
-          lastActiveTimestamp: now
-        };
-      });
-
-      if (!isCleared) {
-        showNotification("Daily Shift Concluded: Pace Calibrated (-3%)");
-      } else {
-        showNotification("Daily Shift Cleared: Objectives Met (+6% Vitals)");
-      }
-    }
+    // Consolidated unified rollover check (idempotent, safe across offline and cloud)
+    runRolloverCheck();
   };
 
   useEffect(() => {
@@ -1008,7 +816,7 @@ export default function App() {
       window.removeEventListener("pointerdown", handleUserActivity);
       window.removeEventListener("keydown", handleUserActivity);
     };
-  }, [statsLoaded, stats.lastMissionResetDate]);
+  }, [statsLoaded, runRolloverCheck]);
 
   const getSimulatedVitals = (): PatientVitals => {
     const safeStats = stats || DEFAULT_STATS;
@@ -1236,7 +1044,6 @@ export default function App() {
         delete copyTriage[today];
         return {
           ...prev,
-          lastMissionResetDate: today,
           triageCasesLogs: copyTriage
         };
       });
@@ -1273,21 +1080,33 @@ export default function App() {
     }
   }, [statsLoaded, logs, authUser]);
 
-  const handleLogPastShift = (date: string, mcqs: number, modules: number, sleep: number, note?: string) => {
+  const handleLogPastShift = (
+    rawDate: string, 
+    mcqs: number, 
+    modules: number, 
+    sleep: number, 
+    note?: string, 
+    oldDate?: string,
+    statusOverride?: DailyMissionRecord['status'] | 'auto'
+  ) => {
     sound.click();
+    const cleanDate = ensureISODate(rawDate);
+    const cleanOldDate = oldDate ? ensureISODate(oldDate) : undefined;
+    const today = getTodayISO();
+
     // 1. Update stats with the retrospective logs
     modifyStats(prev => {
       const nextActivityLogs = { ...(prev.activityLogs || {}) };
-      nextActivityLogs[date] = Math.max(1, (nextActivityLogs[date] || 0), (mcqs > 0 || modules > 0) ? 1 : 0);
+      nextActivityLogs[cleanDate] = Math.max(1, (nextActivityLogs[cleanDate] || 0), (mcqs > 0 || modules > 0) ? 1 : 0);
 
       const nextMcqLogs = { ...(prev.mcqLogs || {}) };
-      nextMcqLogs[date] = mcqs;
+      nextMcqLogs[cleanDate] = mcqs;
 
       const nextVideoLogs = { ...(prev.videoLogs || {}) };
-      nextVideoLogs[date] = modules;
+      nextVideoLogs[cleanDate] = modules;
 
       const nextSleepLogs = { ...(prev.sleepLogs || {}) };
-      nextSleepLogs[date] = sleep;
+      nextSleepLogs[cleanDate] = sleep;
 
       const activeDaysCount = Object.keys(nextActivityLogs).filter(k => (nextActivityLogs[k] || 0) > 0 || (nextMcqLogs[k] || 0) > 0).length;
 
@@ -1308,45 +1127,105 @@ export default function App() {
       };
     });
 
-    // 2. Build DailyMissionRecord for that date
-    const isCleared = mcqs >= 50 && modules >= 4;
-    const isPartial = !isCleared && (mcqs > 0 || modules > 0 || sleep >= 6);
-    const completedCount = isCleared ? 4 : isPartial ? 2 : 0;
-    const completedRate = isCleared ? 100 : isPartial ? 50 : 0;
-    const status: DailyMissionRecord['status'] = isCleared ? 'Target Cleared' : isPartial ? 'Partially Met' : 'Goals Not Met';
+    // If today is being updated, also sync today's active mission progress bars
+    if (cleanDate === today) {
+      setMissions(prev => prev.map(m => {
+        if (m.id === "m-01-mcqs") {
+          return { ...m, current: mcqs, status: mcqs >= m.target ? "Completed" as const : "Pending" as const };
+        }
+        if (m.id === "m-02-lectures") {
+          return { ...m, current: modules, status: modules >= m.target ? "Completed" as const : "Pending" as const };
+        }
+        return m;
+      }));
+    }
+
+    // 2. Build DailyMissionRecord for that date based on actual objective completions
+    const isFullStudy = mcqs >= 50 && modules >= 4;
+    const triageDone = (logs.some(l => ensureISODate(l.date) === cleanDate)) || ((stats.triageCasesLogs?.[cleanDate] || 0) > 0);
+    const mcqsDone = mcqs >= 50;
+    const modulesDone = modules >= 4;
+    const reviewDone = isFullStudy;
+
+    const recordedMissions = [
+      { id: "m-04-triage", title: "Daily Triage Completion", category: "Triage", target: 1, current: triageDone ? 1 : 0, unit: "Session", status: triageDone ? "Completed" as const : "Pending" as const, period: "daily" as const },
+      { id: "m-01-mcqs", title: "Complete daily Marrow MCQs", category: "MCQ", target: 50, current: mcqs, unit: "Questions", status: mcqsDone ? "Completed" as const : "Pending" as const, period: "daily" as const },
+      { id: "m-02-lectures", title: "Watch Marrow video modules", category: "Lectures", target: 4, current: modules, unit: "Hours", status: modulesDone ? "Completed" as const : "Pending" as const, period: "daily" as const },
+      { id: "m-05-review", title: "1 Hour Review Session", category: "Revision", target: 1, current: reviewDone ? 1 : 0, unit: "Hour", status: reviewDone ? "Completed" as const : "Pending" as const, period: "daily" as const }
+    ];
+
+    const completedCount = recordedMissions.filter(m => m.status === 'Completed').length;
+    const totalCount = recordedMissions.length;
+    const completedRate = Math.round((completedCount / totalCount) * 100);
+
+    let calculatedStatus: DailyMissionRecord['status'];
+    if (completedCount === totalCount) {
+      calculatedStatus = 'Target Cleared';
+    } else if (completedCount > 0 && (mcqs > 0 || modules > 0 || completedRate >= 50)) {
+      calculatedStatus = 'Partially Met';
+    } else {
+      calculatedStatus = 'Goals Not Met';
+    }
+
+    const finalStatus: DailyMissionRecord['status'] = (statusOverride && statusOverride !== 'auto')
+      ? statusOverride
+      : calculatedStatus;
+
+    let defaultNote: string;
+    if (finalStatus === 'Target Cleared') {
+      defaultNote = `Shift Cleared: Objectives Met on ${formatDateDMY(cleanDate)}`;
+    } else if (finalStatus === 'Partially Met') {
+      defaultNote = `Shift Partially Met: ${completedCount} of ${totalCount} Objectives (${mcqs} MCQs, ${modules}h Modules)`;
+    } else if (finalStatus === 'Shift Missed') {
+      defaultNote = `Shift Missed on ${formatDateDMY(cleanDate)}`;
+    } else {
+      defaultNote = `Daily Objectives Not Met on ${formatDateDMY(cleanDate)} (${mcqs} MCQs, ${modules}h Modules)`;
+    }
+
+    let finalNote = note?.trim();
+    if (!finalNote) {
+      finalNote = defaultNote;
+    } else {
+      const lower = finalNote.toLowerCase();
+      if (finalStatus === 'Goals Not Met' && (lower.includes('partially met') || lower.includes('shift partially') || lower.includes('objectives met on'))) {
+        finalNote = defaultNote;
+      } else if (finalStatus === 'Partially Met' && (lower.includes('goals not met') || lower.includes('objectives not met') || lower.includes('shift missed'))) {
+        finalNote = defaultNote;
+      }
+    }
 
     const retroRecord: DailyMissionRecord = {
-      date,
+      date: cleanDate,
       completedCount,
-      totalCount: 4,
+      totalCount,
       completedRate,
-      status,
-      note: note?.trim() || (isCleared ? `Shift Cleared: Retrospective Protocol on ${formatDateDMY(date)}` : isPartial ? `Shift Partially Met: ${mcqs} MCQs, ${modules}h Modules` : `Shift Logged on ${formatDateDMY(date)}`),
-      missions: [
-        { id: "m-04-triage", title: "Daily Triage Completion", category: "Triage", target: 1, current: isCleared ? 1 : 0, unit: "Session", status: isCleared ? "Completed" : "Pending", period: "daily" },
-        { id: "m-01-mcqs", title: "Complete daily Marrow MCQs", category: "MCQ", target: 50, current: mcqs, unit: "Questions", status: mcqs >= 50 ? "Completed" : "Pending", period: "daily" },
-        { id: "m-02-lectures", title: "Watch Marrow video modules", category: "Lectures", target: 4, current: modules, unit: "Hours", status: modules >= 4 ? "Completed" : "Pending", period: "daily" },
-        { id: "m-05-review", title: "1 Hour Review Session", category: "Revision", target: 1, current: isCleared ? 1 : 0, unit: "Hour", status: isCleared ? "Completed" : "Pending", period: "daily" }
-      ],
+      status: finalStatus,
+      note: finalNote,
+      missions: recordedMissions,
       archivedAt: new Date().toISOString()
     };
 
     setMissionHistory(prev => {
-      const idx = prev.findIndex(r => r.date === date);
-      let updated: DailyMissionRecord[];
-      if (idx >= 0) {
-        updated = [...prev];
-        updated[idx] = retroRecord;
-      } else {
-        updated = [retroRecord, ...prev];
+      let filtered = [...prev];
+      if (cleanOldDate && cleanOldDate !== cleanDate) {
+        filtered = filtered.filter(r => ensureISODate(r.date) !== cleanOldDate);
       }
-      updated.sort((a, b) => b.date.localeCompare(a.date));
-      return updated;
+      const idx = filtered.findIndex(r => ensureISODate(r.date) === cleanDate);
+      if (idx >= 0) {
+        filtered[idx] = retroRecord;
+      } else {
+        filtered.unshift(retroRecord);
+      }
+      filtered.sort((a, b) => ensureISODate(b.date).localeCompare(ensureISODate(a.date)));
+      return filtered;
     });
 
     // Persist to Firestore or localStorage
     if (authUser && !isDevSandboxMode) {
-      setDoc(doc(db, "users", authUser.uid, "mission_history", date), retroRecord, { merge: true }).catch(console.error);
+      if (cleanOldDate && cleanOldDate !== cleanDate) {
+        deleteDoc(doc(db, "users", authUser.uid, "mission_history", cleanOldDate)).catch(console.error);
+      }
+      setDoc(doc(db, "users", authUser.uid, "mission_history", cleanDate), retroRecord, { merge: true }).catch(console.error);
     } else {
       const storageKey = isDevSandboxMode ? "patient_zero_sandbox_mission_history" : "patient_zero_v2_mission_history";
       const existingStr = localStorage.getItem(storageKey);
@@ -1354,14 +1233,17 @@ export default function App() {
       if (existingStr) {
         try { list = JSON.parse(existingStr); } catch (e) {}
       }
-      const idx = list.findIndex(r => r.date === date);
+      if (cleanOldDate && cleanOldDate !== cleanDate) {
+        list = list.filter(r => ensureISODate(r.date) !== cleanOldDate);
+      }
+      const idx = list.findIndex(r => ensureISODate(r.date) === cleanDate);
       if (idx >= 0) list[idx] = retroRecord;
       else list.unshift(retroRecord);
-      list.sort((a, b) => b.date.localeCompare(a.date));
+      list.sort((a, b) => ensureISODate(b.date).localeCompare(ensureISODate(a.date)));
       localStorage.setItem(storageKey, JSON.stringify(list));
     }
 
-    showNotification(`✓ Shift logged for ${formatDateDMY(date)} (${mcqs} MCQs, ${modules}h modules, ${sleep}h sleep)`);
+    showNotification(`✓ Shift logged for ${formatDateDMY(cleanDate)} (${mcqs} MCQs, ${modules}h modules, ${sleep}h sleep)`);
   };
 
   const handleDeleteArchivedShift = (date: string) => {
@@ -1763,11 +1645,11 @@ export default function App() {
   ];
 
   const NAV_TABS = [
-    { id: "dashboard", label: "Dashboard", icon: <BarChart3 className="w-5 h-5" /> },
-    { id: "missions", label: "Protocols", icon: <Calendar className="w-5 h-5" /> },
-    { id: "triage", label: "Triage", icon: <Activity className="w-5 h-5" /> },
-    { id: "progress", label: "Analytics", icon: <FileText className="w-5 h-5" /> },
-    { id: "rewards", label: "Journey & Wellness", icon: <Compass className="w-5 h-5" /> }
+    { id: "dashboard", label: "Dashboard", shortLabel: "Dashboard", icon: <BarChart3 className="w-5 h-5" /> },
+    { id: "missions", label: "Protocols", shortLabel: "Protocols", icon: <Calendar className="w-5 h-5" /> },
+    { id: "triage", label: "Triage", shortLabel: "Triage", icon: <Activity className="w-5 h-5" /> },
+    { id: "rewards", label: "Journey & Wellness", shortLabel: "Journey", icon: <Compass className="w-5 h-5" /> },
+    { id: "progress", label: "Analytics", shortLabel: "Analytics", icon: <TrendingUp className="w-5 h-5" /> }
   ];
 
   if (authLoading) {
@@ -1965,7 +1847,7 @@ export default function App() {
         </header>
 
         {/* Dashboard Main View */}
-        <main className="flex-1 overflow-y-auto w-full pb-28">
+        <main className="flex-1 overflow-y-auto w-full pb-[calc(6rem+env(safe-area-inset-bottom,0px))]">
            <div className="max-w-7xl mx-auto p-4 sm:p-6 lg:p-8">
              <AnimatePresence mode="wait">
                {activeTab === "dashboard" && (
@@ -2039,21 +1921,15 @@ export default function App() {
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
             >
-              <ProgressPanel stats={stats} logs={logs} moodLogs={moodLogs} />
-              <div className="mt-10 pt-10 border-t border-slate-200 dark:border-slate-800">
-                <RewardsPanel stats={stats} xp={stats.xp} patientsSaved={stats.patientsSaved} studyStreak={dailyStreak} logs={logs} />
-              </div>
-              <div className="mt-10 pt-10 border-t border-slate-200 dark:border-slate-800">
-                <div className="flex justify-between items-center mb-6">
-                  <h3 className="font-bold text-slate-900 dark:text-slate-100 text-xl tracking-tight">Clinical Operation History</h3>
-                  <motion.button whileTap={{ scale: 0.95 }} onClick={handleClearLogs} className="text-xs font-bold text-rose-600 hover:text-rose-700 transition px-4 py-2 rounded-xl bg-rose-50 border border-rose-200">Purge Logs</motion.button>
-                </div>
-                <ShiftLog logs={logs} />
-              </div>
+              <ProgressPanel 
+                stats={stats} 
+                logs={logs} 
+                moodLogs={moodLogs} 
+                onClearLogs={handleClearLogs}
+                initialSection={analyticsSubTab}
+              />
             </motion.div>
           )}
-
-
 
           {activeTab === "rewards" && (
             <motion.div
@@ -2062,46 +1938,70 @@ export default function App() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.2 }}
-              className="flex flex-col gap-6"
+              className="flex flex-col gap-4 sm:gap-6"
             >
-              {/* Journey & Wellness Sub-Navigation Switcher */}
-              <div className="flex items-center justify-center">
-                <div className="bg-slate-100 dark:bg-slate-800/80 p-1.5 rounded-2xl flex items-center gap-1 border border-slate-200 dark:border-slate-700/80 shadow-sm w-full max-w-md">
-                  <button
-                    onClick={() => { sound.click(); setHonorsSubTab("map"); }}
-                    className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
-                      honorsSubTab === "map"
-                        ? "bg-white dark:bg-slate-900 text-cyan-600 dark:text-cyan-300 shadow-sm"
-                        : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-                    }`}
-                  >
-                    <Compass className="w-4 h-4" />
-                    Campus Journey
-                  </button>
-                  <button
-                    onClick={() => { sound.click(); setHonorsSubTab("wellness"); }}
-                    className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
-                      honorsSubTab === "wellness"
-                        ? "bg-white dark:bg-slate-900 text-teal-600 dark:text-teal-300 shadow-sm"
-                        : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
-                    }`}
-                  >
-                    <ShieldCheck className="w-4 h-4" />
-                    Clinical Wellness & Safeguards
-                  </button>
-                </div>
-              </div>
+              {/* Sticky Segmented Sub-Tab Switcher */}
+              <SubTabControl
+                tabs={JOURNEY_SUBTABS}
+                activeTab={journeySubTab}
+                onChange={setJourneySubTab}
+                layoutId="journey-subtab-pill"
+                ariaLabel="Journey and Wellness sections"
+                sticky={true}
+              />
 
-              {honorsSubTab === "map" ? (
-                <JourneyMap stats={stats} onNavigateTab={handleTabChange} />
-              ) : (
-                <WellnessPanel 
-                  stats={stats}
-                  onUpdateStats={(updater) => {
-                    modifyStats(updater);
-                  }}
-                />
-              )}
+              <SwipeableTabContainer
+                onSwipeLeft={handleJourneySwipeLeft}
+                onSwipeRight={handleJourneySwipeRight}
+                className="w-full"
+              >
+                <AnimatePresence mode="wait">
+                  {journeySubTab === "journey" && (
+                    <motion.div
+                      key="subtab-journey"
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 8 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      <JourneyMap stats={stats} onNavigateTab={handleTabChange} />
+                    </motion.div>
+                  )}
+                  {journeySubTab === "wellness" && (
+                    <motion.div
+                      key="subtab-wellness"
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 8 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      <WellnessPanel 
+                        stats={stats}
+                        onUpdateStats={(updater) => {
+                          modifyStats(updater);
+                        }}
+                      />
+                    </motion.div>
+                  )}
+                  {journeySubTab === "achievements" && (
+                    <motion.div
+                      key="subtab-achievements"
+                      initial={{ opacity: 0, x: -8 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      exit={{ opacity: 0, x: 8 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      <RewardsPanel 
+                        stats={stats} 
+                        xp={stats.xp} 
+                        patientsSaved={stats.patientsSaved} 
+                        studyStreak={dailyStreak} 
+                        logs={logs} 
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </SwipeableTabContainer>
             </motion.div>
           )}
 
@@ -2199,77 +2099,57 @@ export default function App() {
         </AnimatePresence>
 
         {/* Universal Bottom Nav */}
-        <nav className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800 z-50 shadow-[0_-5px_15px_rgba(0,0,0,0.1)] dark:shadow-[0_-5px_15px_rgba(0,0,0,0.5)]">
-           <div className="flex items-center justify-around max-w-lg mx-auto w-full px-2 py-1">
+        <nav 
+          aria-label="Primary Navigation"
+          className="fixed bottom-0 left-0 right-0 bg-white/95 dark:bg-slate-950/95 backdrop-blur-md border-t border-slate-200 dark:border-slate-800 z-50 pb-[max(0.5rem,env(safe-area-inset-bottom,0px))] shadow-[0_-4px_16px_rgba(0,0,0,0.06)] dark:shadow-[0_-4px_16px_rgba(0,0,0,0.5)]"
+        >
+           <div className="flex items-stretch justify-around max-w-xl mx-auto w-full px-1 sm:px-2 py-1">
              {NAV_TABS.map(tab => {
-               const isActive = activeTab === tab.id;
+               const isActive = activeTab === tab.id || (tab.id === "rewards" && (activeTab === "achievements" || activeTab === "wellness" || activeTab === "avatar" || activeTab === "journey")) || (tab.id === "progress" && (activeTab === "vault" || activeTab === "pearls" || activeTab === "analytics"));
                return (
-                 <motion.button whileTap={{ scale: 0.95 }}
+                 <motion.button
                    key={tab.id}
+                   whileTap={{ scale: 0.92 }}
                    onClick={() => {
+                     sound.click();
                      handleTabChange(tab.id as any);
                      if ((tab as any).onClick) (tab as any).onClick();
                    }}
-                   className={`flex-1 relative flex flex-col items-center justify-center gap-1 py-2 px-1 transition-all ${
+                   className={`flex-1 relative flex flex-col items-center justify-center gap-0.5 min-h-[50px] py-1 px-1 rounded-xl transition-colors select-none touch-manipulation focus:outline-none ${
                      isActive
-                        ? "text-cyan-600 dark:text-cyan-300 font-bold"
-                        : "text-slate-500 hover:text-cyan-600 dark:hover:text-cyan-400"
+                       ? "text-cyan-700 dark:text-cyan-300 font-bold"
+                       : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
                    }`}
+                   aria-current={isActive ? "page" : undefined}
                  >
-                    {/* Icon with radiant circular cyan bloom originating directly from the glyph */}
-                    <div className="relative flex items-center justify-center">
-                      {isActive && (
-                        <motion.div
-                          layoutId="activeNavIconAura"
-                          transition={{ type: "spring", stiffness: 350, damping: 28 }}
-                          className="absolute inset-0 flex items-center justify-center pointer-events-none"
-                        >
-                          <div
-                            className="w-9 h-9 bg-cyan-400/30 dark:bg-cyan-400/25 blur-md pointer-events-none"
-                            style={{
-                              borderRadius: "53% 47% 62% 38% / 46% 59% 41% 54%",
-                            }}
-                          />
-                          <div
-                            className="w-6 h-6 bg-cyan-300/40 dark:bg-cyan-300/30 blur-sm pointer-events-none"
-                            style={{
-                              borderRadius: "44% 56% 39% 61% / 55% 42% 58% 45%",
-                            }}
-                          />
-                        </motion.div>
-                      )}
-                      <div className={`relative z-10 transition-transform ${isActive ? "text-cyan-600 dark:text-cyan-300 drop-shadow-[0_0_10px_rgba(6,182,212,0.8)] scale-110" : ""}`}>
-                        {tab.icon}
-                      </div>
-                    </div>
+                   {/* Animated Sliding Pill Indicator behind Icon */}
+                   <div className="relative flex items-center justify-center px-3 py-1 rounded-xl">
+                     {isActive && (
+                       <motion.div
+                         layoutId="bottom-nav-active-pill"
+                         className="absolute inset-0 bg-cyan-100/80 dark:bg-cyan-950/70 border border-cyan-200/50 dark:border-cyan-800/40 rounded-xl shadow-xs"
+                         transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                       />
+                     )}
+                     <span className="relative z-10 shrink-0">{tab.icon}</span>
+                   </div>
 
-                    {/* Text with soft luminous bloom originating directly from the typography */}
-                    <div className="relative flex items-center justify-center">
-                      {isActive && (
-                        <motion.div
-                          layoutId="activeNavTextAura"
-                          transition={{ type: "spring", stiffness: 350, damping: 28 }}
-                          className="absolute inset-0 flex items-center justify-center pointer-events-none"
-                        >
-                          <div
-                            className="w-full min-w-[32px] h-3 bg-cyan-300/30 dark:bg-cyan-400/20 blur-sm pointer-events-none"
-                            style={{ borderRadius: "9999px" }}
-                          />
-                        </motion.div>
-                      )}
-                      <span className={`relative z-10 text-[9px] font-black tracking-widest uppercase transition-colors ${isActive ? "text-cyan-700 dark:text-cyan-200 drop-shadow-[0_0_6px_rgba(6,182,212,0.6)]" : ""}`}>
-                        {tab.label}
-                      </span>
-                    </div>
+                   {/* Clean, readable label */}
+                   <span className={`text-[9px] sm:text-[10px] leading-tight tracking-wider uppercase text-center transition-colors truncate max-w-full ${
+                     isActive ? "font-black text-cyan-800 dark:text-cyan-200" : "font-semibold text-slate-500 dark:text-slate-400"
+                   }`}>
+                     {tab.shortLabel || tab.label}
+                   </span>
 
-                    {/* Minimalist static cyan underline indicator */}
-                    {isActive && (
-                      <motion.div
-                        layoutId="activeNavIndicator"
-                        transition={{ type: "spring", stiffness: 400, damping: 30 }}
-                        className="relative z-10 w-4 h-0.5 bg-cyan-500 dark:bg-cyan-400 rounded-full shadow-[0_0_8px_rgba(6,182,212,0.9)] mt-0.5"
-                      />
-                    )}
+                   {/* Clean 2px top indicator bar with smooth layout animation */}
+                   {isActive && (
+                     <motion.span 
+                       layoutId="bottom-nav-active-bar"
+                       aria-hidden="true"
+                       className="absolute top-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-cyan-500 dark:bg-cyan-400 rounded-full"
+                       transition={{ type: "spring", stiffness: 450, damping: 35 }}
+                     />
+                   )}
                  </motion.button>
                );
              })}

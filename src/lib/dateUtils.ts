@@ -21,28 +21,31 @@ export function getUserTimeZone(): string {
 }
 
 /**
- * Formats any input (ISO string, Date object, or epoch number) to 'dd-mm-yyyy'.
+ * Formats any input (ISO string, Date object, or epoch number) to uniform 'dd/mm/yyyy'.
  * Examples:
- *   "2026-10-09" -> "09-10-2026"
- *   "2026-10-09T07:30:00Z" -> "09-10-2026"
- *   Date(2026, 9, 9) -> "09-10-2026"
+ *   "2026-10-13" -> "13/10/2026"
+ *   "2026-10-13T07:30:00Z" -> "13/10/2026"
+ *   Date(2026, 9, 13) -> "13/10/2026"
  */
 export function formatDateDMY(input?: string | number | Date | null, tz?: string): string {
   if (!input) {
     return formatDateDMY(getTodayISO(tz));
   }
 
-  // If already in dd-mm-yyyy format
+  // If string, handle both dd-mm-yyyy / dd/mm/yyyy and yyyy-mm-dd patterns
   if (typeof input === 'string') {
     const trimmed = input.trim();
-    if (/^\d{2}-\d{2}-\d{4}$/.test(trimmed)) {
-      return trimmed;
+    // dd-mm-yyyy or dd/mm/yyyy
+    const dmyMatch = trimmed.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (dmyMatch) {
+      const [, d, m, y] = dmyMatch;
+      return `${padZero(Number(d))}/${padZero(Number(m))}/${y}`;
     }
     // Match yyyy-mm-dd pattern
-    const ymdMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    const ymdMatch = trimmed.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
     if (ymdMatch) {
       const [, y, m, d] = ymdMatch;
-      return `${d}-${m}-${y}`;
+      return `${padZero(Number(d))}/${padZero(Number(m))}/${y}`;
     }
   }
 
@@ -63,12 +66,12 @@ export function formatDateDMY(input?: string | number | Date | null, tz?: string
     const day = parts.find(p => p.type === 'day')?.value || padZero(d.getDate());
     const month = parts.find(p => p.type === 'month')?.value || padZero(d.getMonth() + 1);
     const year = parts.find(p => p.type === 'year')?.value || d.getFullYear();
-    return `${day}-${month}-${year}`;
+    return `${day}/${month}/${year}`;
   } catch {
     const day = padZero(d.getDate());
     const month = padZero(d.getMonth() + 1);
     const year = d.getFullYear();
-    return `${day}-${month}-${year}`;
+    return `${day}/${month}/${year}`;
   }
 }
 
@@ -188,4 +191,36 @@ export function getIntermediateISODates(startIso: string, endIso: string): strin
 
   return result;
 }
+
+/**
+ * Normalizes any date string or Date object to standardized ISO 'yyyy-mm-dd'.
+ * Handles 'yyyy-mm-dd', 'dd-mm-yyyy', 'dd/mm/yyyy', ISO timestamps, etc.
+ */
+export function ensureISODate(input?: string | number | Date | null, tz?: string): string {
+  if (!input) return getTodayISO(tz);
+  if (input instanceof Date) {
+    if (isNaN(input.getTime())) return getTodayISO(tz);
+    return `${input.getFullYear()}-${padZero(input.getMonth() + 1)}-${padZero(input.getDate())}`;
+  }
+  const str = String(input).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(str)) {
+    return str;
+  }
+  const dmyMatch = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (dmyMatch) {
+    const [, d, m, y] = dmyMatch;
+    return `${y}-${padZero(Number(m))}-${padZero(Number(d))}`;
+  }
+  const ymdMatch = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (ymdMatch) {
+    const [, y, m, d] = ymdMatch;
+    return `${y}-${padZero(Number(m))}-${padZero(Number(d))}`;
+  }
+  const parsed = new Date(str);
+  if (!isNaN(parsed.getTime())) {
+    return `${parsed.getFullYear()}-${padZero(parsed.getMonth() + 1)}-${padZero(parsed.getDate())}`;
+  }
+  return str;
+}
+
 

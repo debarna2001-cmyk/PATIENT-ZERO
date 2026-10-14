@@ -152,3 +152,21 @@ html, body {
   background: rgba(148, 163, 184, 0.4);
 }
 
+/* Eliminate browser-native rigid black rectangular focus outlines and borders on subtabs */
+[role="tablist"] {
+  border-style: none !important;
+  outline: none !important;
+}
+
+[role="tab"] {
+  border-style: none !important;
+  outline: none !important;
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+[role="tab"]:focus,
+[role="tab"]:focus-visible {
+  outline: none !important;
+  box-shadow: none !important;
+}

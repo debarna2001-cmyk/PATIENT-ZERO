@@ -1,44 +1,62 @@
-# Implementation Summary: Shift Continuity Resolution, Retrospective Protocol Logging & Settings Simplification
+# Sticky Sub-Tab Transparent Floating Navigation
 
-## Status: Completed & Verified
+Eliminate the full-width rectangular dark strip behind the sticky sub-tabs by making the container background completely transparent, allowing the pill navigation to float seamlessly above the view content.
 
-### 1. Indian Standard Time (IST / Asia/Kolkata) Enforced Everywhere (11/10/2026)
-- **Timezone Standardization**: Default timezone is permanently established as `Asia/Kolkata` (`IST`) across all date parsing and comparison functions (`getTodayISO()`, `formatDateDMY()`, `getCurrentMondayISO()`, `getDaysAgoISO()`).
-- **Eliminated UTC Date Desync**: Replaced all instances of `new Date().toISOString().split("T")[0]` and naive UTC operations in `src/App.tsx`, `DashboardTab.tsx`, `Heatmap.tsx`, `ProgressPanel.tsx`, and `TriageSession.tsx` with timezone-aware calculations. In India, today is consistently identified as **11/10/2026** (`2026-10-11`).
-- **Standardized UI Display**: Standardized all dates to render as `dd-mm-yyyy` (e.g., `11-10-2026`), matching Indian date standards.
+### User Review & Critical Decisions
 
----
+> [!IMPORTANT]
+> The exact visual source of the persistent black bar has been confirmed: the full-width rectangular dark strip generated behind the sticky sub-tab bar.
 
-### 2. Today's Triage & Daily Missions Reset to Uncompleted
-- **Reset Today's Triage**: Cleared any premature triage cases for today (`stats.triageCasesLogs[today] = 0`), and reset the daily triage mission (`m-04-triage`) to `Pending` with `current: 0, target: 1` session.
-- **Uncompleted Today Shift**: Guaranteed that today (`11-10-2026`) is active and uncompleted (0% completed) until you actually perform and complete your triage cases and MCQs today.
-- **Past Shifts Preserved**: Previous historical shifts (from Oct 7, Oct 8, Oct 9, Oct 10) remain intact in the archive and can be edited or augmented retrospectives without disturbing today's live state.
+- **Confirmed Decision (Background)**: The sticky sub-tab bar wrapper will be completely transparent (`bg-transparent`), stripping out the rectangular dark backdrop (`bg-slate-950/95`) and blur layer so no dark band spans the screen.
+- **Confirmed Decision (Capsule & Indicator)**: The rounded capsule track and the active tab's soft inner pill indicator (rounded border with soft shadow) will be preserved, ensuring clear visual selection without rigid outer borders.
 
 ---
 
-### 3. Retrospective Protocol Logger in Shift Continuity Archive
-- **Location**: Situated inside **Protocols → Shift Continuity Archive**.
-- **Retro Logging Form**:
-  - **Shift Date Picker**: Select any prior date (constrained up to today).
-  - **MCQs Solved**: Numerical input with quick `+10`, `+25`, `+50` increment chips.
-  - **Marrow Modules Watched**: Numerical input with quick `+1`, `+2`, `+3` increment chips.
-  - **Hours Slept**: Step-adjusted rest hours with quick `6h`, `7h`, `8h` chips.
-  - **Shift Notes**: Optional custom clinical notes.
-  - **Save Action**: Saves to `missionHistory` and immediately updates `stats.mcqLogs`, `stats.videoLogs`, `stats.sleepLogs`, and `stats.activityLogs`.
-- **In-Row Shift Editing & Deletion**:
-  - Each archived shift in the Shift Continuity Archive now displays an **Edit button** (`<Edit3>`) that prefills the retrospective logger with that day's MCQs, Modules, and Sleep values.
-  - An optional delete button allows removing erroneous archive records.
-  - Synchronizes with Firestore (`users/{uid}/mission_history/{date}`) when live cloud sync is active, and with local sandbox when Sandbox Mode is active.
+### 1. Overview & Core Concept
+
+- **What It Does**: Transposes the sticky sub-tab bar into a floating, transparent navigation header. The segmented control capsule floats directly over the main view content without any dark rectangular background strip or outer boundary lines.
+- **Target Audience / Persona**: Mobile and tablet health tracking users switching between view segments (e.g., Overview, Trends, History).
+- **Key Value**: Delivers an organic, borderless modern mobile aesthetic with zero visual clutter or contrasting black strips.
 
 ---
 
-### 4. Settings Panel Radical Simplification
-- **Zero Reset Clutter**: Removed all hard reset and data wipe buttons from the normal user view.
-- **Dev Sandbox Safety Preserved**: The **Dev Sandbox Mode** toggle remains clearly accessible at the top of Settings with live cloud sync indication for `debarna2001@gmail.com` and isolated sandbox cache reset.
-- **Streamlined User View**:
-  - Resident Profile & Callsign (`Dr. B`)
-  - Simulation Target Exam Date (`01-03-2027`)
-  - Audio & Haptic Feedback toggle
-  - 0800 HRS Morning Shift Reminder notification check
-  - Safe JSON Backup & Migration (Export & Import JSON)
-  - Sign Out button
+### 2. User Experience & Visual Design
+
+- **Key User Flows**: When scrolling down the page, the segmented control smoothly sticks to the top of the viewport. Because the container is completely transparent, the page background flows naturally underneath the floating capsule.
+- **Visual Identity & Theme**:
+  - *Container Posture*: Completely transparent sticky header (`bg-transparent`, zero outer borders, zero background opacity).
+  - *Capsule Track*: Centered floating capsule (`rounded-full`) with soft neutral backdrop (`bg-slate-200/60 dark:bg-slate-900/70`) and subtle boundary.
+  - *Active Tab Indicator*: Clean pill highlight (`bg-white dark:bg-slate-800 rounded-full shadow-xs border border-slate-200/70 dark:border-slate-700/60`) providing depth and tactile feedback.
+- **Interactive Feedback**: Touch-friendly tap targets, smooth animated indicator transitions, and natural drag/scroll physics without visual artifacting.
+
+---
+
+### 3. Key Product Decisions & Trade-Offs
+
+- **Decision 1: Complete Transparency vs. Translucent Blur Bar**
+  - *Chosen Approach*: Completely transparent container without full-width background color or backdrop filter.
+  - *Why*: Eliminates the dark band reported in screenshots while letting the capsule float with maximum visual lightness.
+  - *Alternatives Considered*: Retaining a semi-transparent dark tint (`bg-slate-950/40`), which created the rectangular dark strip.
+
+- **Decision 2: Pill Contrast & Hierarchy**
+  - *Chosen Approach*: Maintain the active pill's soft rounded border and elevation shadow.
+  - *Why*: Preserves accessibility and high affordance so users clearly know which sub-tab is active even over varying content.
+
+---
+
+### 4. Technical Architecture & Data Strategy
+
+```
+┌────────────────────────────────────────────────────────┐
+│ App Global Header (Brand, Badges, Dark Mode)          │
+├────────────────────────────────────────────────────────┤
+│ Sticky Sub-Tab Zone (Completely Transparent Wrapper)   │
+│   ┌──────────────────────────────────────────────────┐ │
+│   │ [ Active Pill ]   [ Inactive Tab ]   [ Tab 3 ]   │ │  <- Floating capsule
+│   └──────────────────────────────────────────────────┘ │
+├────────────────────────────────────────────────────────┤
+│ Active View Content (Metrics, Timeline, Panels)        │
+└────────────────────────────────────────────────────────┘
+```
+
+- **Interactive Mapping**: The sticky wrapper applies pure layout positioning (`sticky top-0 z-30 py-2.5 px-4 bg-transparent`) without color fills or borders. The child track manages horizontal scrolling and pill geometry.

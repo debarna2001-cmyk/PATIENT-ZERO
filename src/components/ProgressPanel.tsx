@@ -1,15 +1,19 @@
 import { sound } from "../lib/audio";
-import { motion } from "motion/react";
+import { motion, AnimatePresence } from "motion/react";
 import { UserStats, EmergencyLog, MoodLog } from "../types";
 import { Crosshair, HelpCircle, Award, Target, AlertOctagon, HeartPulse, Zap, Bot, Loader2, Sparkles, BookOpen, TrendingUp, TrendingDown, Clock, Activity, Calendar, Brain, BatteryCharging, Coffee, ShieldAlert, ShieldCheck, Star, Crown, Medal, Trophy, Flame, Lock } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { formatDateDMY, getDaysAgoISO, getTodayISO } from "../lib/dateUtils";
+import ShiftLog from "./ShiftLog";
+import { SubTabControl, SubTabItem, SwipeableTabContainer } from "./SubTabControl";
 
 interface Props {
   stats: UserStats;
   logs: EmergencyLog[];
   moodLogs?: MoodLog[];
+  onClearLogs?: () => void;
+  initialSection?: 'performance' | 'trends' | 'ai_review';
 }
 
 // Clinical ranks calibrated for the full 8-14 month residency preparation marathon
@@ -22,7 +26,20 @@ export const RANKS = [
   { rank: "Master Attending", minXp: 280000, title: "Level 6: Board Consultant (Months 12-14)" }
 ];
 
-export default function ProgressPanel({ stats, logs, moodLogs = [] }: Props) {
+const ANALYTICS_SUBTABS: SubTabItem<'performance' | 'trends' | 'ai_review'>[] = [
+  { id: 'performance', label: 'Performance', icon: <Crosshair className="w-4 h-4 shrink-0" />, activeColor: "text-cyan-700 dark:text-cyan-300" },
+  { id: 'trends', label: 'Trends', icon: <TrendingUp className="w-4 h-4 shrink-0" />, activeColor: "text-indigo-700 dark:text-indigo-300" },
+  { id: 'ai_review', label: 'AI Review', icon: <Bot className="w-4 h-4 shrink-0" />, activeColor: "text-purple-700 dark:text-purple-300" }
+];
+
+export default function ProgressPanel({ stats, logs, moodLogs = [], onClearLogs, initialSection }: Props) {
+  const [activeSection, setActiveSection] = useState<'performance' | 'trends' | 'ai_review'>(initialSection || 'performance');
+
+  useEffect(() => {
+    if (initialSection) {
+      setActiveSection(initialSection);
+    }
+  }, [initialSection]);
   const [accuracyWindow, setAccuracyWindow] = useState<'dual' | 'rolling' | 'lifetime'>('dual');
   const [reviewLoading, setReviewLoading] = useState(false);
   const [reviewData, setReviewData] = useState<{ title: string; content: string; actionableAdvice: string[] } | null>(null);
@@ -222,10 +239,49 @@ export default function ProgressPanel({ stats, logs, moodLogs = [] }: Props) {
     });
   }
 
+  const analyticsSectionsList: ('performance' | 'trends' | 'ai_review')[] = ['performance', 'trends', 'ai_review'];
+  const handleAnalyticsSwipeLeft = () => {
+    const idx = analyticsSectionsList.indexOf(activeSection);
+    if (idx < analyticsSectionsList.length - 1) {
+      setActiveSection(analyticsSectionsList[idx + 1]);
+    }
+  };
+  const handleAnalyticsSwipeRight = () => {
+    const idx = analyticsSectionsList.indexOf(activeSection);
+    if (idx > 0) {
+      setActiveSection(analyticsSectionsList[idx - 1]);
+    }
+  };
+
   return (
-    <div className="flex flex-col gap-8">
-      {/* Visual Header Block */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden p-6">
+    <div className="flex flex-col gap-4 sm:gap-6 max-w-5xl mx-auto w-full">
+      {/* Sticky Segmented Sub-Tab Switcher */}
+      <SubTabControl
+        tabs={ANALYTICS_SUBTABS}
+        activeTab={activeSection}
+        onChange={setActiveSection}
+        layoutId="analytics-subtab-pill"
+        ariaLabel="Analytics sections"
+        sticky={true}
+      />
+
+      <SwipeableTabContainer
+        onSwipeLeft={handleAnalyticsSwipeLeft}
+        onSwipeRight={handleAnalyticsSwipeRight}
+        className="w-full"
+      >
+        <AnimatePresence mode="wait">
+          {activeSection === "performance" && (
+            <motion.div
+              key="panel-performance"
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 8 }}
+              transition={{ duration: 0.15 }}
+              className="flex flex-col gap-6"
+            >
+              {/* Visual Header Block */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl shadow-sm overflow-hidden p-6">
         
         {/* Core Rank Badge */}
         <div className="md:border-r border-slate-200 dark:border-slate-800 md:pr-6 flex flex-col justify-between relative">
@@ -503,8 +559,19 @@ export default function ProgressPanel({ stats, logs, moodLogs = [] }: Props) {
           </div>
         )}
       </div>
+    </motion.div>
+  )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+{activeSection === "trends" && (
+  <motion.div
+    key="panel-trends"
+    initial={{ opacity: 0, x: -8 }}
+    animate={{ opacity: 1, x: 0 }}
+    exit={{ opacity: 0, x: 8 }}
+    transition={{ duration: 0.15 }}
+    className="flex flex-col gap-6"
+  >
+    <div className="grid grid-cols-1 gap-6">
         {/* Temporal Data Vitals graph (Real) */}
         <div className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm">
           <div className="flex justify-between items-center mb-6">
@@ -628,7 +695,31 @@ export default function ProgressPanel({ stats, logs, moodLogs = [] }: Props) {
         )}
       </div>
 
-      {/* AI Chief Resident Oversight */}
+      {/* Clinical Operation History */}
+      <div className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-bold text-slate-900 dark:text-slate-100 text-lg tracking-tight">Clinical Operation History</h3>
+          {onClearLogs && (
+            <motion.button whileTap={{ scale: 0.95 }} onClick={onClearLogs} className="text-xs font-bold text-rose-600 hover:text-rose-700 transition px-3 py-1.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/40">
+              Purge Logs
+            </motion.button>
+          )}
+        </div>
+        <ShiftLog logs={logs} />
+      </div>
+    </motion.div>
+  )}
+
+{activeSection === "ai_review" && (
+  <motion.div
+    key="panel-ai_review"
+    initial={{ opacity: 0, x: -8 }}
+    animate={{ opacity: 1, x: 0 }}
+    exit={{ opacity: 0, x: 8 }}
+    transition={{ duration: 0.15 }}
+    className="flex flex-col gap-6"
+  >
+    {/* AI Chief Resident Oversight */}
       <div className="border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm relative overflow-hidden">
         <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 dark:bg-indigo-500/5 blur-3xl rounded-full"></div>
         <div className="flex justify-between items-center mb-6 relative z-10">
@@ -730,7 +821,10 @@ export default function ProgressPanel({ stats, logs, moodLogs = [] }: Props) {
           </div>
         )}
       </div>
-
+    </motion.div>
+  )}
+        </AnimatePresence>
+      </SwipeableTabContainer>
     </div>
   );
 }
